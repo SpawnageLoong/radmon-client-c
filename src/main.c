@@ -26,6 +26,8 @@
 #include <linux/can.h>
 #include <linux/can/raw.h>
 
+using namespace std;
+
 void print_menu();
 
 int main()
@@ -41,7 +43,7 @@ int main()
     cout << "Copyright (C) 2025  Richard Loong\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it under certain conditions.";
     
     // Check if can0 interface is active, activate it if not
-    FILE *fp = popen("ip link show | grep \"can0\"")
+    FILE *fp = popen("ip link show | grep \"can0\"", "r");
     if (fp == NULL) {
         can_active = 0;
         system("sudo ip link set can0 type can bitrate 100000");
@@ -96,7 +98,9 @@ int main()
     
     //6.Close the socket and can0
     close(s);
-    system("sudo ifconfig can0 down");
+    if (can_active == 1) {
+        system("sudo ifconfig can0 down");
+    }
     
     return 0;
 }
