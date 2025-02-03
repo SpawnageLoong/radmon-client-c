@@ -40,15 +40,19 @@ int main()
     struct can_frame frame;
     
     memset(&frame, 0, sizeof(struct can_frame));
-    cout << "Copyright (C) 2025  Richard Loong\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it under certain conditions.";
+    system("clear");
+    cout << "\nCopyright (C) 2025  Richard Loong\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it under certain conditions.\n\n";
     
     // Check if can0 interface is active, activate it if not
     FILE *fp = popen("ip link show | grep \"can0\"", "r");
     if (fp == NULL) {
+        cout << "can0 interface not active, enabling now...\n";
         can_active = 0;
         system("sudo ip link set can0 type can bitrate 100000");
         system("sudo ifconfig can0 up");
+        cout << "can0 interface enabled\n\n";
     } else {
+        cout << "can0 interface already active\n\n";
         can_active = 1;
     }
     
@@ -84,6 +88,8 @@ int main()
     rfilter[0].can_mask = CAN_SFF_MASK;
     setsockopt(s, SOL_CAN_RAW, CAN_RAW_FILTER, &rfilter, sizeof(rfilter));
 
+    print_menu();
+
     //5.Receive data and exit
     while(1) {
         nbytes = read(s, &frame, sizeof(frame));
@@ -99,6 +105,7 @@ int main()
     //6.Close the socket and can0
     close(s);
     if (can_active == 1) {
+        cout << "Exiting...";
         system("sudo ifconfig can0 down");
     }
     
