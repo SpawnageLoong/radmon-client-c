@@ -25,6 +25,8 @@
 #include <sys/socket.h>
 #include <linux/can.h>
 #include <linux/can/raw.h>
+#include <time.h>
+#include <linux/limits.h>
 
 using namespace std;
 
@@ -35,6 +37,7 @@ void print_logo();
 void main_menu(int* user_input);
 void command_can_dump_full();
 void command_can_dump_part();
+void save_can_dump_full();
 
 int s;
 struct can_frame frame;
@@ -53,7 +56,7 @@ int main()
     cout << "\nCopyright (C) 2025  Richard Loong\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it under certain conditions.\n\n";
     
     // Check if can0 interface is active, activate it if not
-    FILE *fp = popen("ip link show | grep \"can0\"", "r");
+    FILE *fp = popen("ip link show | grep \"can0\" | grep \"UP\"", "r");
     if (fp == NULL) {
         cout << "can0 interface not detected, enabling now...\n";
         system("sudo ip link set can0 up type can bitrate 1000000");
@@ -92,7 +95,7 @@ int main()
     
     //4.Define receive rules
     struct can_filter rfilter[1];
-    rfilter[0].can_id = 0x123;
+    rfilter[0].can_id = RSP_FRAME_ID;
     rfilter[0].can_mask = CAN_SFF_MASK;
     setsockopt(s, SOL_CAN_RAW, CAN_RAW_FILTER, &rfilter, sizeof(rfilter));
     
@@ -109,6 +112,9 @@ int main()
                 break;
             case 2:
                 command_can_dump_part();
+                break;
+            case 3:
+                save_can_dump_full();
                 break;
             case 9:
                 is_exit = 1;
@@ -139,7 +145,7 @@ int main()
     // Close the socket and can0
     cout << "Exiting...\n\n";
     close(s);
-    system("sudo ifconfig can0 down");
+    //system("sudo ifconfig can0 down");
     return 0;
 }
 
@@ -159,6 +165,7 @@ void main_menu(int* user_input) {
     cout << "\nAvailable Options:";
     cout << "\n  1) Dump FRAM (32kB)";
     cout << "\n  2) Dump FRAM (Select a sector)";
+    cout << "\n  3) Save FRAM to dump file (32kB)";
     cout << "\n";
     cout << "\n  9) Exit";
     cout << "\n";
@@ -184,10 +191,6 @@ void command_can_dump_full() {
     frame.data[7] = 0x00;
     
     int nbytes;
-    //printf("can_id  = 0x%X\r\n", frame.can_id);
-    //printf("can_dlc = %d\r\n", frame.can_dlc);
-    //for(int i = 0; i < 8; i++)
-    //    printf("data[%d] = %d\r\n", i, frame.data[i]);
     
     // Send message
     nbytes = write(s, &frame, sizeof(frame)); 
@@ -275,5 +278,72 @@ void command_can_dump_part() {
     if(nbytes != sizeof(frame)) {
         printf("Send Error frame[0]!\r\n");
     }
+    return;
+}
+
+void save_can_dump_full() {
+    FILE *fptr;
+    time_t epoch_time;
+    epoch_time = time(NULL);
+
+    char filename[23 + sizeof(char)];
+    sprintf(filename, "radmon-dumps/%ld.dump", epoch_time);
+
+    char path[PATH_MAX + 1];
+    ssize_t length = readlink("/proc/self/exe", path, PATH_MAX);
+    path[length] = '\0';
+    char cwd[sizeof(path)];
+    strncpy(cwd, path, strlen(path) - 14);
+    cwd[strlen(path) - 7] = '\0';
+
+    char file_path[PATH_MAX + 25];
+    sprintf(file_path, "%s/%s", cwd, filename);
+    char touch[PATH_MAX + 32];
+    sprintf(touch, "touch %s\n", file_path);
+
+    // Create the dump file
+    system(touch);
+    fptr = fopen(file_path, "w");
+    if (fptr == NULL) {
+        cout << "Error opening file\n";
+        return;
+    }
+    //cout << "filename: " << filename << "\n\n";
+
+    // Set send data
+    frame.can_id = CMD_FRAME_ID;
+    frame.can_dlc = 8; // data length
+    frame.data[0] = 0x01;
+    frame.data[1] = 0x00;
+    frame.data[2] = 0x00;
+    frame.data[3] = 0x00;
+    frame.data[4] = 0x00;
+    frame.data[5] = 0x00;
+    frame.data[6] = 0x00;
+    frame.data[7] = 0x00;
+
+    // Send message
+    int nbytes = write(s, &frame, sizeof(frame)); 
+    cout << "\nDump command sent\n";
+    if(nbytes != sizeof(frame)) {
+        cout << "Send Error frame[0]!\r\n";
+        return;
+    }
+    
+    cout << "\nReceiving data...\n";
+    for (int i = 0; i < 8191; i++) {
+        nbytes = read(s, &frame, sizeof(frame));
+        if(nbytes > 0) {
+            //printf("can_id = 0x%X\r\ncan_dlc = %d \r\n", frame.can_id, frame.can_dlc);
+            //fprintf(fptr, "test data\n");
+            for(int j = 0; j < 8; j++) {
+                fprintf(fptr, "%2X ", frame.data[j]);
+            }
+            fprintf(fptr, "\n");
+        }
+    }
+    fclose(fptr);
+
+    cout << "\nData saved in " << file_path << "\n";
     return;
 }
