@@ -26,8 +26,11 @@
 #include <linux/can.h>
 #include <linux/can/raw.h>
 
+void print_menu();
+
 int main()
 {
+    int can_active;
     int ret;
     int s, nbytes;
     struct sockaddr_can addr;
@@ -36,10 +39,18 @@ int main()
     
     memset(&frame, 0, sizeof(struct can_frame));
     cout << "Copyright (C) 2025  Richard Loong\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it under certain conditions.";
-    system("sudo ip link set can0 type can bitrate 100000");
-    system("sudo ifconfig can0 up");
-
-    printf("this is a can receive demo\r\n");
+    
+    // Check if can0 interface is active, activate it if not
+    FILE *fp = popen("ip link show | grep \"can0\"")
+    if (fp == NULL) {
+        can_active = 0;
+        system("sudo ip link set can0 type can bitrate 100000");
+        system("sudo ifconfig can0 up");
+    } else {
+        can_active = 1;
+    }
+    
+    //printf("this is a can receive demo\r\n");
     
     //1.Create socket
     s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
@@ -88,4 +99,15 @@ int main()
     system("sudo ifconfig can0 down");
     
     return 0;
+}
+
+void print_menu() {
+    cout << "\n██████   █████  ██████  ███    ███  ██████  ███    ██      ██████  █████  ███    ██ ";
+    cout << "\n██   ██ ██   ██ ██   ██ ████  ████ ██    ██ ████   ██     ██      ██   ██ ████   ██ ";
+    cout << "\n██████  ███████ ██   ██ ██ ████ ██ ██    ██ ██ ██  ██     ██      ███████ ██ ██  ██ ";
+    cout << "\n██   ██ ██   ██ ██   ██ ██  ██  ██ ██    ██ ██  ██ ██     ██      ██   ██ ██  ██ ██ ";
+    cout << "\n██   ██ ██   ██ ██████  ██      ██  ██████  ██   ████      ██████ ██   ██ ██   ████ ";
+    cout << "\n";
+    cout << "\n____________________________________________________________________________________";
+    cout << "\n";
 }
