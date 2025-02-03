@@ -56,7 +56,8 @@ int main()
     FILE *fp = popen("ip link show | grep \"can0\"", "r");
     if (fp == NULL) {
         cout << "can0 interface not detected, enabling now...\n";
-        system("sudo ip link set can0 type can bitrate 100000");
+        system("sudo ip link set can0 up type can bitrate 1000000");
+        system("sudo ifconfig can0 txqueuelen 65536");
         cout << "can0 interface enabled\n\n";
     } else {
         cout << "can0 interface detected\n\n";
@@ -183,16 +184,16 @@ void command_can_dump_full() {
     frame.data[7] = 0x00;
     
     int nbytes;
-    printf("can_id  = 0x%X\r\n", frame.can_id);
-    printf("can_dlc = %d\r\n", frame.can_dlc);
-    for(int i = 0; i < 8; i++)
-        printf("data[%d] = %d\r\n", i, frame.data[i]);
+    //printf("can_id  = 0x%X\r\n", frame.can_id);
+    //printf("can_dlc = %d\r\n", frame.can_dlc);
+    //for(int i = 0; i < 8; i++)
+    //    printf("data[%d] = %d\r\n", i, frame.data[i]);
     
     // Send message
     nbytes = write(s, &frame, sizeof(frame)); 
-    cout << "\nmessage sent\n";
+    cout << "\nDump command sent\n";
     if(nbytes != sizeof(frame)) {
-        printf("Send Error frame[0]!\r\n");
+        cout << "Send Error frame[0]!\r\n";
     }
     return;
 }
