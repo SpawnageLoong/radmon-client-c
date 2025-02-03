@@ -1,8 +1,8 @@
-CC = gcc
+CC = g++
 CFLAGS = -Wall -g -O0
 
-main:main.c 
+radmon-client:src/main.c 
 	    $(CC) $(CFLAGS) -o $@ $^
 
 clean:
-	    $(RM) can_receive .*.sw?
+	    $(RM) radmon-client .*.sw?
