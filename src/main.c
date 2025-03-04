@@ -30,15 +30,21 @@
 
 using namespace std;
 
+// Compile Flags
+//#define DEBUG 0
+
+// Constants
 #define CMD_FRAME_ID 0x010;
 #define RSP_FRAME_ID 0x011;
 
+// Function Definitions
 void print_logo();
 void main_menu(int* user_input);
 void command_can_dump_full();
 void command_can_dump_part();
 void save_can_dump_full();
 
+// Global Variables
 int s;
 struct can_frame frame;
 
@@ -111,10 +117,10 @@ int main()
                 command_can_dump_full();
                 break;
             case 2:
-                command_can_dump_part();
+                command_can_dump_debug();
                 break;
-            case 3:
-                save_can_dump_full();
+            case 5:
+                command_can_clear_full();
                 break;
             case 9:
                 is_exit = 1;
@@ -163,9 +169,11 @@ void main_menu(int* user_input) {
     cout << "\n____________________________________________________________________________________";
     cout << "\n";
     cout << "\nAvailable Options:";
-    cout << "\n  1) Dump FRAM (32kB)";
-    cout << "\n  2) Dump FRAM (Select a sector)";
-    cout << "\n  3) Save FRAM to dump file (32kB)";
+    cout << "\n  1) Dump FRAM (32kB) to console";
+    cout << "\n  2) Dump FRAM (512B) to console";
+    //cout << "\n  3) Dump FRAM (32kB) to bin file";
+    cout << "\n";
+    cout << "\n  5) Clear FRAM";
     cout << "\n";
     cout << "\n  9) Exit";
     cout << "\n";
@@ -181,7 +189,7 @@ void command_can_dump_full() {
     // Set send data
     frame.can_id = CMD_FRAME_ID;
     frame.can_dlc = 8; // data length
-    frame.data[0] = 0x01;
+    frame.data[0] = 0x02;
     frame.data[1] = 0x00;
     frame.data[2] = 0x00;
     frame.data[3] = 0x00;
@@ -201,6 +209,31 @@ void command_can_dump_full() {
     return;
 }
 
+void command_can_dump_debug() {
+    // Set send data
+    frame.can_id = CMD_FRAME_ID;
+    frame.can_dlc = 8; // data length
+    frame.data[0] = 0x04;
+    frame.data[1] = 0x00;
+    frame.data[2] = 0x00;
+    frame.data[3] = 0x00;
+    frame.data[4] = 0x00;
+    frame.data[5] = 0x00;
+    frame.data[6] = 0x00;
+    frame.data[7] = 0x00;
+    
+    int nbytes;
+    
+    // Send message
+    nbytes = write(s, &frame, sizeof(frame)); 
+    cout << "\nDump command sent\n";
+    if(nbytes != sizeof(frame)) {
+        cout << "Send Error frame[0]!\r\n";
+    }
+    return;
+}
+
+// This command is not used in the current version
 void command_can_dump_part() {
     int is_input_valid;
     char user_hex_input[4];
@@ -345,5 +378,29 @@ void save_can_dump_full() {
     fclose(fptr);
 
     cout << "\nData saved in " << file_path << "\n";
+    return;
+}
+
+void command_can_clear_full() {
+    // Set send data
+    frame.can_id = CMD_FRAME_ID;
+    frame.can_dlc = 8; // data length
+    frame.data[0] = 0x01;
+    frame.data[1] = 0x00;
+    frame.data[2] = 0x00;
+    frame.data[3] = 0x00;
+    frame.data[4] = 0x00;
+    frame.data[5] = 0x00;
+    frame.data[6] = 0x00;
+    frame.data[7] = 0x00;
+    
+    int nbytes;
+    
+    // Send message
+    nbytes = write(s, &frame, sizeof(frame)); 
+    cout << "\nClear command sent\n";
+    if(nbytes != sizeof(frame)) {
+        cout << "Send Error frame[0]!\r\n";
+    }
     return;
 }
