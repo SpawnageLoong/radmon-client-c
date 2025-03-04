@@ -41,8 +41,11 @@ using namespace std;
 void print_logo();
 void main_menu(int* user_input);
 void command_can_dump_full();
+void command_can_dump_debug();
 void command_can_dump_part();
 void save_can_dump_full();
+void command_can_clear_full();
+void command_rtc_update();
 
 // Global Variables
 int s;
@@ -119,7 +122,10 @@ int main()
             case 2:
                 command_can_dump_debug();
                 break;
-            case 5:
+            case 4:
+                command_rtc_update();
+                break;
+            case 6:
                 command_can_clear_full();
                 break;
             case 9:
@@ -171,9 +177,10 @@ void main_menu(int* user_input) {
     cout << "\nAvailable Options:";
     cout << "\n  1) Dump FRAM (32kB) to console";
     cout << "\n  2) Dump FRAM (512B) to console";
-    //cout << "\n  3) Dump FRAM (32kB) to bin file";
     cout << "\n";
-    cout << "\n  5) Clear FRAM";
+    cout << "\n  4) Update RTC";
+    cout << "\n";
+    cout << "\n  6) Clear FRAM";
     cout << "\n";
     cout << "\n  9) Exit";
     cout << "\n";
@@ -399,6 +406,32 @@ void command_can_clear_full() {
     // Send message
     nbytes = write(s, &frame, sizeof(frame)); 
     cout << "\nClear command sent\n";
+    if(nbytes != sizeof(frame)) {
+        cout << "Send Error frame[0]!\r\n";
+    }
+    return;
+}
+
+void command_rtc_update() {
+    // Get the current time
+    uint32_t now = (uint32_t)time(NULL);
+    // Set send data
+    frame.can_id = CMD_FRAME_ID;
+    frame.can_dlc = 8; // data length
+    frame.data[0] = 0xAA;
+    frame.data[1] = (now >> 24) & 0xFF;
+    frame.data[2] = (now >> 16) & 0xFF;
+    frame.data[3] = (now >> 8) & 0xFF;
+    frame.data[4] = now & 0xFF;
+    frame.data[5] = 0x00;
+    frame.data[6] = 0x00;
+    frame.data[7] = 0x00;
+    
+    int nbytes;
+    
+    // Send message
+    nbytes = write(s, &frame, sizeof(frame)); 
+    cout << "\nRTC update sent\n";
     if(nbytes != sizeof(frame)) {
         cout << "Send Error frame[0]!\r\n";
     }
