@@ -415,49 +415,85 @@ static int send_data_frame(int tty_fd, const char *hex_id, const char *hex_data)
 
 
 
-static void dump_data_frames(int tty_fd)
+static void clear_buffer(int tty_fd)
 {
-  int i, frame_len;
+  int is_buffer_filled = 1;
+  int result;
+  unsigned char byte;
+
+  while (is_buffer_filled) {
+    result = read(tty_fd, &byte, 1);
+    if (result != 1) {
+      is_buffer_filled = 0;
+      return;
+    }
+    usleep(2);
+  }
+  return;
+}
+
+
+
+static void receive_frame(int tty_fd)
+{
+  int i, frame_len = 0;
   unsigned char frame[32];
-  struct timespec ts;
-  printf("test1\n");
-  program_running = 1;
 
-  while (program_running) {
-    printf("test\n");
-    frame_len = frame_recv(tty_fd, frame, sizeof(frame));
+  int result, checksum;
+  unsigned char byte;
 
-    if (! program_running)
-      break;
+  int is_frame_complete = 0;
 
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    printf("%lu.%06lu ", ts.tv_sec, ts.tv_nsec / 1000);
+  frame_len = 0;
+  while (!is_frame_complete) {
+    result = read(tty_fd, &byte, 1);
+    if (result == -1) {
+      fprintf(stderr, "read() failed: %s\n", strerror(errno));
+      return;
+      
+    } else if (result > 0) {
+      if (print_traffic)
+        fprintf(stderr, "%02x ", byte);
 
-    if (frame_len == -1) {
-      printf("Frame recieve error!\n");
+      frame[frame_len++] = byte;
+
+      if (frame_is_complete(frame, frame_len)) {
+        is_frame_complete = 1;
+        break;
+      }
+    } else {
+      return;
+    }
+    usleep(2);
+  }
+
+  if ((frame_len == 20) && (frame[0] == 0xaa) && (frame[1] == 0x55)) {
+    checksum = generate_checksum(&frame[2], 17);
+    if (checksum != frame[frame_len - 1]) {
+      fprintf(stderr, "frame_recv() failed: Checksum incorrect\n");
+      return;
+    }
+  }
+
+  if (frame_len == -1) {
+    printf("Frame recieve error!\n");
+  } else {
+    if ((frame_len >= 6) &&
+        (frame[0] == 0xaa) &&
+        ((frame[1] >> 4) == 0xc)) {
+      printf("Frame ID: %02x%02x, Data: ", frame[3], frame[2]);
+      for (i = 4; i < frame_len - 1; i++) {
+        printf("%02x ", frame[i]);
+      }
+      printf("\n");
 
     } else {
-
-      if ((frame_len >= 6) &&
-          (frame[0] == 0xaa) &&
-          ((frame[1] >> 4) == 0xc)) {
-        printf("Frame ID: %02x%02x, Data: ", frame[3], frame[2]);
-        for (i = frame_len - 2; i > 3; i--) {
-          printf("%02x ", frame[i]);
-        }
-        printf("\n");
-
-      } else {
-        printf("Unknown: ");
-        for (i = 0; i <= frame_len; i++) {
-          printf("%02x ", frame[i]);
-        }
-        printf("\n");
+      printf("Unknown: ");
+      for (i = 0; i <= frame_len; i++) {
+        printf("%02x ", frame[i]);
       }
+      printf("\n");
     }
-
-    if (terminate_after && (--terminate_after == 0))
-      program_running = 0;
   }
 }
 
@@ -550,6 +586,7 @@ void display_menu(char* user_input)
     "\n"
     "  6) Clear FRAM\n"
     "\n"
+    "  8) Clear CAN buffer\n"
     "  9) Exit\n"
     "\n"
     "Enter a number 1-9: ");
@@ -723,23 +760,30 @@ int main(int argc, char *argv[])
     sprintf(debug_output, "User input: %c", user_input);
     logprintf(logptr, debug_output, INFO);
     switch(user_input) {
-    case '6':
-      logprintf(logptr, "Clearing FRAM", INFO);
-      fprintf(stderr, "Clearing FRAM.\n");
-      send_clear_cmd(tty_fd, inject_id);
-      receive_ack_frame(tty_fd);
-      break;
+      case '6':
+        logprintf(logptr, "Clearing FRAM", INFO);
+        fprintf(stderr, "Clearing FRAM.\n");
+        send_clear_cmd(tty_fd, inject_id);
+        usleep(100000);
+        receive_frame(tty_fd);
+        break;
+      
+      case '8':
+        logprintf(logptr, "Clearing CANbus buffer", INFO);
+        fprintf(stderr, "Clearing CANbus buffer.\n");
+        clear_buffer(tty_fd);
+        break;
 
-    case '9':
-      logprintf(logptr, "Exiting program", INFO);
-      fprintf(stderr, "Now exiting.\n");
-      is_exit = true;
-      fclose(logptr);
-      return EXIT_SUCCESS;
-    
-    default:
-      fprintf(stderr, "Unknown command received.\n");
-      break;
+      case '9':
+        logprintf(logptr, "Exiting program", INFO);
+        fprintf(stderr, "Now exiting.\n");
+        is_exit = true;
+        fclose(logptr);
+        return EXIT_SUCCESS;
+      
+      default:
+        fprintf(stderr, "Unknown command received.\n");
+        break;
     }
   }
 
