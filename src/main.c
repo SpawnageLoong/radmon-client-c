@@ -204,59 +204,6 @@ static int frame_send(int tty_fd, const unsigned char *frame, int frame_len)
 
 
 
-static int frame_recv(int tty_fd, unsigned char *frame, int frame_len_max)
-{
-  int result, frame_len, checksum;
-  unsigned char byte;
-
-  if (print_traffic)
-    fprintf(stderr, "<<< ");
-
-  frame_len = 0;
-  while (program_running) {
-    result = read(tty_fd, &byte, 1);
-    if (result == -1) {
-      if (errno != EAGAIN && errno != EWOULDBLOCK) {
-        fprintf(stderr, "read() failed: %s\n", strerror(errno));
-        return -1;
-      }
-
-    } else if (result > 0) {
-      if (print_traffic)
-        fprintf(stderr, "%02x ", byte);
-
-      if (frame_len == frame_len_max) {
-        fprintf(stderr, "frame_recv() failed: Overflow\n");
-        return -1;
-      }
-
-      frame[frame_len++] = byte;
-
-      if (frame_is_complete(frame, frame_len)) {
-        break;
-      }
-    }
-
-    usleep(10);
-  }
-
-  if (print_traffic)
-    fprintf(stderr, "\n");
-
-  /* Compare checksum for command frames only. */
-  if ((frame_len == 20) && (frame[0] == 0xaa) && (frame[1] == 0x55)) {
-    checksum = generate_checksum(&frame[2], 17);
-    if (checksum != frame[frame_len - 1]) {
-      fprintf(stderr, "frame_recv() failed: Checksum incorrect\n");
-      return -1;
-    }
-  }
-
-  return frame_len;
-}
-
-
-
 static int command_settings(int tty_fd, CANUSB_SPEED speed, CANUSB_MODE mode, CANUSB_FRAME frame)
 {
   int cmd_frame_len;
@@ -470,7 +417,7 @@ static void receive_frame(int tty_fd)
   if ((frame_len == 20) && (frame[0] == 0xaa) && (frame[1] == 0x55)) {
     checksum = generate_checksum(&frame[2], 17);
     if (checksum != frame[frame_len - 1]) {
-      fprintf(stderr, "frame_recv() failed: Checksum incorrect\n");
+      fprintf(stderr, "receive_frame() failed: Checksum incorrect\n");
       return;
     }
   }
@@ -630,37 +577,6 @@ void logprintf(FILE *logptr, char* string, LOGGING_LEVEL log_level)
   strcat(print_string, string);
   strcat(print_string, "\033[0m");
   fprintf(logptr, "%s\n", print_string);
-}
-
-
-
-static void receive_ack_frame(int tty_fd)
-{
-  int i, frame_len;
-  unsigned char frame[32];
-
-  frame_len = frame_recv(tty_fd, frame, sizeof(frame));
-
-  if (frame_len == -1) {
-    printf("Frame recieve error!\n");
-  } else {
-    if ((frame_len >= 6) &&
-        (frame[0] == 0xaa) &&
-        ((frame[1] >> 4) == 0xc)) {
-      printf("Frame ID: %02x%02x, Data: ", frame[3], frame[2]);
-      for (i = frame_len - 2; i > 3; i--) {
-        printf("%02x ", frame[i]);
-      }
-      printf("\n");
-
-    } else {
-      printf("Unknown: ");
-      for (i = 0; i <= frame_len; i++) {
-        printf("%02x ", frame[i]);
-      }
-      printf("\n");
-    }
-  }
 }
 
 
