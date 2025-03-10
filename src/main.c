@@ -454,8 +454,11 @@ static void dump_data_frames(int tty_fd)
   int i, frame_len;
   unsigned char frame[32];
   struct timespec ts;
+  printf("test1\n");
+  program_running = 1;
 
   while (program_running) {
+    printf("test\n");
     frame_len = frame_recv(tty_fd, frame, sizeof(frame));
 
     if (! program_running)
@@ -595,7 +598,8 @@ void display_menu(char* user_input)
 void send_clear_cmd(int tty_fd, char *inject_id)
 {
   char data[] = { '0', '1' };
-  inject_data_frame(tty_fd, inject_id, data);
+  //inject_data_frame(tty_fd, inject_id, data);
+  send_data_frame(tty_fd, CANUSB_FRAME_STANDARD, binary_id_lsb, binary_id_msb, binary_data, data_len);
   return;
 }
 
@@ -623,6 +627,37 @@ void logprintf(FILE *logptr, char* string, LOGGING_LEVEL log_level)
   strcat(print_string, string);
   strcat(print_string, "\033[0m");
   fprintf(logptr, "%s\n", print_string);
+}
+
+
+
+static void receive_ack_frame(int tty_fd)
+{
+  int i, frame_len;
+  unsigned char frame[32];
+
+  frame_len = frame_recv(tty_fd, frame, sizeof(frame));
+
+  if (frame_len == -1) {
+    printf("Frame recieve error!\n");
+  } else {
+    if ((frame_len >= 6) &&
+        (frame[0] == 0xaa) &&
+        ((frame[1] >> 4) == 0xc)) {
+      printf("Frame ID: %02x%02x, Data: ", frame[3], frame[2]);
+      for (i = frame_len - 2; i > 3; i--) {
+        printf("%02x ", frame[i]);
+      }
+      printf("\n");
+
+    } else {
+      printf("Unknown: ");
+      for (i = 0; i <= frame_len; i++) {
+        printf("%02x ", frame[i]);
+      }
+      printf("\n");
+    }
+  }
 }
 
 
@@ -726,6 +761,7 @@ int main(int argc, char *argv[])
       logprintf(logptr, "Clearing FRAM", INFO);
       fprintf(stderr, "Clearing FRAM.\n");
       send_clear_cmd(tty_fd, inject_id);
+      receive_ack_frame(tty_fd);
       break;
 
     case '9':
