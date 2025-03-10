@@ -32,6 +32,7 @@
 #include <sys/time.h>
 
 #include <iostream>
+#include <fstream>
 #include <linux/limits.h>
 
 using namespace std;
@@ -84,11 +85,7 @@ typedef enum {
 } LOGGING_LEVEL;
 
 
-
-static int terminate_after = 1;
 static int program_running = 1;
-static int inject_payload_mode = CANUSB_INJECT_PAYLOAD_MODE_FIXED;
-static float inject_sleep_gap = CANUSB_INJECT_SLEEP_GAP_DEFAULT;
 static int print_traffic = 0;
 
 
@@ -282,12 +279,11 @@ static int convert_from_hex(const char *hex_string, unsigned char *bin_string, i
 
 
 
-static int send_data_frame(int tty_fd, const char *hex_id, const char *hex_data)//CANUSB_FRAME frame, unsigned char id_lsb, unsigned char id_msb, unsigned char data[], int data_length_code)
+static int send_data_frame(int tty_fd, const string hex_id, const char *hex_data)//CANUSB_FRAME frame, unsigned char id_lsb, unsigned char id_msb, unsigned char data[], int data_length_code)
 {
   int data_len;
   unsigned char binary_data[8];
   unsigned char binary_id_lsb = 0, binary_id_msb = 0;
-  int error = 0;
 
   data_len = convert_from_hex(hex_data, binary_data, sizeof(binary_data));
   if (data_len == 0) {
@@ -295,7 +291,7 @@ static int send_data_frame(int tty_fd, const char *hex_id, const char *hex_data)
     return -1;
   }
 
-  switch (strlen(hex_id)) {
+  switch (hex_id.length()) {
     case 1:
       binary_id_lsb = hex_value(hex_id[0]);
       break;
@@ -545,38 +541,42 @@ void display_menu(char* user_input)
 
 
 
-void send_clear_cmd(int tty_fd, char *inject_id)
+void send_clear_cmd(int tty_fd, string inject_id)
 {
   char data[] = { '0', '1' };
-  //inject_data_frame(tty_fd, inject_id, data);
   send_data_frame(tty_fd, inject_id, data);
   return;
 }
 
 
 
-void logprintf(FILE *logptr, char* string, LOGGING_LEVEL log_level)
+void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level)
 {
-  char print_string[4095];
+  char time_string[50];
   time_t ts = time(NULL);
   struct tm datetime = *localtime(&ts);
-  strftime(print_string, 50, "%F %H:%M ", &datetime);
+  strftime(time_string, 50, "%F %H:%M ", &datetime);
+  std::string print_string(time_string);
   switch(log_level) {
   case 0:
-    strcat(print_string, "\033[1;37m[INFO] ");
+    //strcat(print_string, "\033[1;37m[INFO] ");
+    print_string.append("\033[1;37m[INFO] ");
     break;
   
   case 1:
-    strcat(print_string, "\033[1;33m[WARN] ");
+    //strcat(print_string, "\033[1;33m[WARN] ");
+    print_string.append("\033[1;33m[WARN] ");
     break;
 
   case 2:
-    strcat(print_string, "\033[1;31m[ERROR] ");
+    //strcat(print_string, "\033[1;31m[ERROR] ");
+    print_string.append("\033[1;31m[ERROR] ");
     break;
   }
-  strcat(print_string, string);
-  strcat(print_string, "\033[0m");
-  fprintf(logptr, "%s\n", print_string);
+  //strcat(print_string, string);
+  //strcat(print_string, "\033[0m");
+  print_string.append(string).append("\033[0m\n");
+  logptr << print_string;
 }
 
 
@@ -584,13 +584,13 @@ void logprintf(FILE *logptr, char* string, LOGGING_LEVEL log_level)
 int main(int argc, char *argv[])
 {
   int c, tty_fd;
-  char *tty_device = NULL, *inject_id, *receive_id, user_input;
+  char *tty_device = NULL, user_input;
   CANUSB_SPEED speed = canusb_int_to_speed(CANUSB_CAN_SPEED_DEFAULT);
   int baudrate = CANUSB_TTY_BAUD_RATE_DEFAULT;
   bool is_exit = false;
   char debug_output[4095];
+  string inject_id, receive_id;
 
-  FILE *logptr;
   char *bin_path(argv[0]);
 
   time_t ts = time(NULL);
@@ -666,7 +666,7 @@ int main(int argc, char *argv[])
 
   command_settings(tty_fd, speed, CANUSB_MODE_NORMAL, CANUSB_FRAME_STANDARD);
 
-  logptr = fopen(log_path, "w");
+  ofstream logptr(log_path);
   logprintf(logptr, "Program started.", INFO);
 
   display_logo();
@@ -694,7 +694,7 @@ int main(int argc, char *argv[])
         logprintf(logptr, "Exiting program", INFO);
         fprintf(stderr, "Now exiting.\n");
         is_exit = true;
-        fclose(logptr);
+        logptr.close();
         return EXIT_SUCCESS;
       
       default:
