@@ -56,3 +56,6 @@ dkms.conf
 
 # Dump files
 *.dump
+
+# Program logs
+*.log
