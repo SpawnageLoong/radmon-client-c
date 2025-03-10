@@ -293,54 +293,6 @@ static int command_settings(int tty_fd, CANUSB_SPEED speed, CANUSB_MODE mode, CA
 
 
 
-static int send_data_frame(int tty_fd, CANUSB_FRAME frame, unsigned char id_lsb, unsigned char id_msb, unsigned char data[], int data_length_code)
-{
-#define MAX_FRAME_SIZE 13
-  int data_frame_len = 0;
-  unsigned char data_frame[MAX_FRAME_SIZE] = {0x00};
-
-  if (data_length_code < 0 || data_length_code > 8)
-  {
-    fprintf(stderr, "Data length code (DLC) must be between 0 and 8!\n");
-    return -1;
-  }
-
-  /* Byte 0: Packet Start */
-  data_frame[data_frame_len++] = 0xaa;
-
-  /* Byte 1: CAN Bus Data Frame Information */
-  data_frame[data_frame_len] = 0x00;
-  data_frame[data_frame_len] |= 0xC0; /* Bit 7 Always 1, Bit 6 Always 1 */
-  if (frame == CANUSB_FRAME_STANDARD)
-    data_frame[data_frame_len] &= 0xDF; /* STD frame */
-  else /* CANUSB_FRAME_EXTENDED */
-    data_frame[data_frame_len] |= 0x20; /* EXT frame */
-  data_frame[data_frame_len] &= 0xEF; /* 0=Data */
-  data_frame[data_frame_len] |= data_length_code; /* DLC=data_len */
-  data_frame_len++;
-
-  /* Byte 2 to 3: ID */
-  data_frame[data_frame_len++] = id_lsb; /* lsb */
-  data_frame[data_frame_len++] = id_msb; /* msb */
-
-  /* Byte 4 to (4+data_len): Data */
-  for (int i = 0; i < data_length_code; i++)
-    data_frame[data_frame_len++] = data[i];
-
-  /* Last byte: End of frame */
-  data_frame[data_frame_len++] = 0x55;
-
-  if (frame_send(tty_fd, data_frame, data_frame_len) < 0)
-  {
-    fprintf(stderr, "Unable to send frame!\n");
-    return -1;
-  }
-
-  return 0;
-}
-
-
-
 static int hex_value(int c)
 {
   if (c >= 0x30 && c <= 0x39) /* '0' - '9' */
@@ -383,21 +335,12 @@ static int convert_from_hex(const char *hex_string, unsigned char *bin_string, i
 
 
 
-static int inject_data_frame(int tty_fd, const char *hex_id, const char *hex_data)
+static int send_data_frame(int tty_fd, const char *hex_id, const char *hex_data)//CANUSB_FRAME frame, unsigned char id_lsb, unsigned char id_msb, unsigned char data[], int data_length_code)
 {
   int data_len;
   unsigned char binary_data[8];
   unsigned char binary_id_lsb = 0, binary_id_msb = 0;
-  struct timespec gap_ts;
-  struct timeval now;
   int error = 0;
-
-  gap_ts.tv_sec = inject_sleep_gap / 1000;
-  gap_ts.tv_nsec = (long)(((long long)(inject_sleep_gap * 1000000)) % 1000000000LL);
-
-  /* Set seed value for pseudo random numbers. */
-  gettimeofday(&now, NULL);
-  srandom(now.tv_usec);
 
   data_len = convert_from_hex(hex_data, binary_data, sizeof(binary_data));
   if (data_len == 0) {
@@ -406,45 +349,68 @@ static int inject_data_frame(int tty_fd, const char *hex_id, const char *hex_dat
   }
 
   switch (strlen(hex_id)) {
-  case 1:
-    binary_id_lsb = hex_value(hex_id[0]);
-    break;
+    case 1:
+      binary_id_lsb = hex_value(hex_id[0]);
+      break;
+  
+    case 2:
+      binary_id_lsb = (hex_value(hex_id[0]) * 16) + hex_value(hex_id[1]);
+      break;
+  
+    case 3:
+      binary_id_msb = hex_value(hex_id[0]);
+      binary_id_lsb = (hex_value(hex_id[1]) * 16) + hex_value(hex_id[2]);
+      break;
+  
+    default:
+      fprintf(stderr, "Unable to convert ID from hex to binary!\n");
+      return -1;
+  }
 
-  case 2:
-    binary_id_lsb = (hex_value(hex_id[0]) * 16) + hex_value(hex_id[1]);
-    break;
+  CANUSB_FRAME frame = CANUSB_FRAME_STANDARD;
 
-  case 3:
-    binary_id_msb = hex_value(hex_id[0]);
-    binary_id_lsb = (hex_value(hex_id[1]) * 16) + hex_value(hex_id[2]);
-    break;
+  #define MAX_FRAME_SIZE 13
+  int data_frame_len = 0;
+  unsigned char data_frame[MAX_FRAME_SIZE] = {0x00};
 
-  default:
-    fprintf(stderr, "Unable to convert ID from hex to binary!\n");
+  if (data_len < 0 || data_len > 8)
+  {
+    fprintf(stderr, "Data length code (DLC) must be between 0 and 8!\n");
     return -1;
   }
 
-  while (program_running && ! error) {
-    if (gap_ts.tv_sec || gap_ts.tv_nsec)
-      nanosleep(&gap_ts, NULL);
+  /* Byte 0: Packet Start */
+  data_frame[data_frame_len++] = 0xaa;
 
-    if (terminate_after && (--terminate_after == 0))
-      program_running = 0;
+  /* Byte 1: CAN Bus Data Frame Information */
+  data_frame[data_frame_len] = 0x00;
+  data_frame[data_frame_len] |= 0xC0; /* Bit 7 Always 1, Bit 6 Always 1 */
+  if (frame == CANUSB_FRAME_STANDARD)
+    data_frame[data_frame_len] &= 0xDF; /* STD frame */
+  else /* CANUSB_FRAME_EXTENDED */
+    data_frame[data_frame_len] |= 0x20; /* EXT frame */
+  data_frame[data_frame_len] &= 0xEF; /* 0=Data */
+  data_frame[data_frame_len] |= data_len; /* DLC=data_len */
+  data_frame_len++;
 
-    if (inject_payload_mode == CANUSB_INJECT_PAYLOAD_MODE_RANDOM) {
-      int i;
-      for (i = 0; i < data_len; i++)
-        binary_data[i] = random();
-    } else if (inject_payload_mode == CANUSB_INJECT_PAYLOAD_MODE_INCREMENTAL) {
-      int i;
-      for (i = 0; i < data_len; i++)
-        binary_data[i]++;
-    }
+  /* Byte 2 to 3: ID */
+  data_frame[data_frame_len++] = binary_id_lsb; /* lsb */
+  data_frame[data_frame_len++] = binary_id_msb; /* msb */
 
-    error = send_data_frame(tty_fd, CANUSB_FRAME_STANDARD, binary_id_lsb, binary_id_msb, binary_data, data_len);
+  /* Byte 4 to (4+data_len): Data */
+  for (int i = 0; i < data_len; i++)
+    data_frame[data_frame_len++] = binary_data[i];
+
+  /* Last byte: End of frame */
+  data_frame[data_frame_len++] = 0x55;
+
+  if (frame_send(tty_fd, data_frame, data_frame_len) < 0)
+  {
+    fprintf(stderr, "Unable to send frame!\n");
+    return -1;
   }
 
-  return error;
+  return 0;
 }
 
 
@@ -599,7 +565,7 @@ void send_clear_cmd(int tty_fd, char *inject_id)
 {
   char data[] = { '0', '1' };
   //inject_data_frame(tty_fd, inject_id, data);
-  send_data_frame(tty_fd, CANUSB_FRAME_STANDARD, binary_id_lsb, binary_id_msb, binary_data, data_len);
+  send_data_frame(tty_fd, inject_id, data);
   return;
 }
 
