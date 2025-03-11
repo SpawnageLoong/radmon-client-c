@@ -85,13 +85,185 @@ typedef enum {
 } LOGGING_LEVEL;
 
 
+// Global Variables
 static int program_running = 1;
 static int print_traffic = 0;
-
 
 char debug_output[4095];
 
 
+// Function Prototypes
+static CANUSB_SPEED canusb_int_to_speed(int speed);
+static int generate_checksum(const unsigned char *data, int data_len);
+static int frame_is_complete(const unsigned char *frame, int frame_len);
+static int frame_send(int tty_fd, const unsigned char *frame, int frame_len);
+static int command_settings(int tty_fd, CANUSB_SPEED speed, CANUSB_MODE mode, CANUSB_FRAME frame);
+static int hex_value(int c);
+static int convert_from_hex(const char *hex_string, unsigned char *bin_string, int bin_string_len);
+static int send_data_frame(int tty_fd, const string hex_id, const char *hex_data);
+static void clear_buffer(int tty_fd);
+static void receive_frame(int tty_fd, unsigned char *frame_out);
+static int adapter_init(const char *tty_device, int baudrate);
+static void display_help(const char *progname);
+static void sigterm(int signo);
+static void display_logo();
+static void display_menu(char* user_input);
+static void send_clear_cmd(int tty_fd, string inject_id);
+static void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level);
+static void print_frame(unsigned char *frame);
+
+
+
+int main(int argc, char *argv[])
+{
+  int c, tty_fd;
+  char *tty_device = NULL, user_input;
+  CANUSB_SPEED speed = canusb_int_to_speed(CANUSB_CAN_SPEED_DEFAULT);
+  int baudrate = CANUSB_TTY_BAUD_RATE_DEFAULT;
+  bool is_exit = false;
+  unsigned char frame[32];
+  string inject_id, receive_id;
+
+  char *bin_path(argv[0]);
+
+  time_t ts = time(NULL);
+  struct tm datetime = *localtime(&ts);
+  char time_string[50];
+  strftime(time_string, 50, "%F_%H%Mhrs.log", &datetime);
+
+  char log_path[PATH_MAX];
+  strcpy(log_path, bin_path);
+  strcat(log_path, "-logs/");
+  strcat(log_path, time_string);
+
+  inject_id = CANUSB_INJECT_ID_DEFAULT;
+  receive_id = CANUSB_RECEIVE_ID_DEFAULT;
+
+  ofstream logptr(log_path);
+  logprintf(logptr, "Program started.", INFO);
+
+  while ((c = getopt(argc, argv, "hd:s:b:i:r:")) != -1) {
+    switch (c) {
+    case 'h':
+      display_help(argv[0]);
+      logptr.close();
+      remove(log_path);
+      return EXIT_SUCCESS;
+
+    case 'd':
+      tty_device = optarg;
+      sprintf(debug_output, "TTY device set to: %s", tty_device);
+      logprintf(logptr, debug_output, INFO);
+      break;
+
+    case 's':
+      speed = canusb_int_to_speed(atoi(optarg));
+      sprintf(debug_output, "CAN speed set to: %d", atoi(optarg));
+      logprintf(logptr, debug_output, INFO);
+      break;
+
+    case 'b':
+      baudrate = atoi(optarg);
+      sprintf(debug_output, "Baudrate set to: %d", baudrate);
+      logprintf(logptr, debug_output, INFO);
+      break;
+
+    case 'i':
+      inject_id = optarg;
+      sprintf(debug_output, "Inject ID set to: %s", inject_id.c_str());
+      logprintf(logptr, debug_output, INFO);
+      break;
+    
+    case 'r':
+      receive_id = optarg;
+      sprintf(debug_output, "Receive ID set to: %s", receive_id.c_str());
+      logprintf(logptr, debug_output, INFO);
+      break;
+
+    case '?':
+    default:
+      display_help(argv[0]);
+      logptr.close();
+      remove(log_path);
+      return EXIT_FAILURE;
+    }
+  }
+
+  signal(SIGTERM, sigterm);
+  signal(SIGHUP, sigterm);
+  signal(SIGINT, sigterm);
+
+  if (tty_device == NULL) {
+    fprintf(stderr, "Please specify a TTY!\n");
+    display_help(argv[0]);
+    sprintf(debug_output, "TTY device not specified, exiting.");
+    logprintf(logptr, debug_output, ERROR);
+    return EXIT_FAILURE;
+  }
+
+  if (speed == 0) {
+    fprintf(stderr, "Please specify a valid speed!\n");
+    display_help(argv[0]);
+    sprintf(debug_output, "CAN speed not specified, exiting.");
+    logprintf(logptr, debug_output, ERROR);
+    return EXIT_FAILURE;
+  }
+
+  tty_fd = adapter_init(tty_device, baudrate);
+  if (tty_fd == -1) {
+    sprintf(debug_output, "Failed to initialize adapter, exiting.");
+    logprintf(logptr, debug_output, ERROR);
+    return EXIT_FAILURE;
+  }
+
+  command_settings(tty_fd, speed, CANUSB_MODE_NORMAL, CANUSB_FRAME_STANDARD);
+  sprintf(debug_output, "Adapter initialized successfully.");
+  logprintf(logptr, debug_output, INFO);
+
+  display_logo();
+
+  while (!is_exit) {
+    display_menu(&user_input);
+    sprintf(debug_output, "User input: %c", user_input);
+    logprintf(logptr, debug_output, INFO);
+    switch(user_input) {
+      case '6':
+        logprintf(logptr, "Clearing FRAM", INFO);
+        fprintf(stderr, "Clearing FRAM.\n");
+        send_clear_cmd(tty_fd, inject_id);
+        usleep(100000);
+        receive_frame(tty_fd, frame);
+        print_frame(frame);
+        break;
+      
+      case '8':
+        logprintf(logptr, "Clearing CANbus buffer", INFO);
+        fprintf(stderr, "Clearing CANbus buffer.\n");
+        clear_buffer(tty_fd);
+        break;
+
+      case '9':
+        logprintf(logptr, "Exiting program", INFO);
+        fprintf(stderr, "Now exiting.\n");
+        is_exit = true;
+        logptr.close();
+        return EXIT_SUCCESS;
+      
+      default:
+        logprintf(logptr, "Unknown command", WARN);
+        fprintf(stderr, "Unknown command received.\n");
+        break;
+    }
+  }
+
+  logprintf(logptr, "Unexpected exit of main loop", ERROR);
+  fprintf(stderr, "Unexpected exit of main loop, now exiting.\n");
+  return EXIT_FAILURE;
+}
+
+
+
+// Function Definitions
 static CANUSB_SPEED canusb_int_to_speed(int speed)
 {
   switch (speed) {
@@ -379,9 +551,9 @@ static void clear_buffer(int tty_fd)
 
 
 
-static void receive_frame(int tty_fd)
+static void receive_frame(int tty_fd, unsigned char *frame_out)
 {
-  int i, frame_len = 0;
+  int frame_len = 0;
   unsigned char frame[32];
 
   int result, checksum;
@@ -424,22 +596,7 @@ static void receive_frame(int tty_fd)
   if (frame_len == -1) {
     printf("Frame recieve error!\n");
   } else {
-    if ((frame_len >= 6) &&
-        (frame[0] == 0xaa) &&
-        ((frame[1] >> 4) == 0xc)) {
-      printf("Frame ID: %02x%02x, Data: ", frame[3], frame[2]);
-      for (i = 4; i < frame_len - 1; i++) {
-        printf("%02x ", frame[i]);
-      }
-      printf("\n");
-
-    } else {
-      printf("Unknown: ");
-      for (i = 0; i <= frame_len; i++) {
-        printf("%02x ", frame[i]);
-      }
-      printf("\n");
-    }
+    print_frame(frame);
   }
 }
 
@@ -584,147 +741,21 @@ void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level)
 
 
 
-int main(int argc, char *argv[])
+void print_frame(unsigned char *frame)
 {
-  int c, tty_fd;
-  char *tty_device = NULL, user_input;
-  CANUSB_SPEED speed = canusb_int_to_speed(CANUSB_CAN_SPEED_DEFAULT);
-  int baudrate = CANUSB_TTY_BAUD_RATE_DEFAULT;
-  bool is_exit = false;
-  string inject_id, receive_id;
-
-  char *bin_path(argv[0]);
-
-  time_t ts = time(NULL);
-  struct tm datetime = *localtime(&ts);
-  char time_string[50];
-  strftime(time_string, 50, "%F_%H%Mhrs.log", &datetime);
-
-  char log_path[PATH_MAX];
-  strcpy(log_path, bin_path);
-  strcat(log_path, "-logs/");
-  strcat(log_path, time_string);
-
-  inject_id = CANUSB_INJECT_ID_DEFAULT;
-  receive_id = CANUSB_RECEIVE_ID_DEFAULT;
-
-  ofstream logptr(log_path);
-  logprintf(logptr, "Program started.", INFO);
-
-  while ((c = getopt(argc, argv, "hd:s:b:i:r:")) != -1) {
-    switch (c) {
-    case 'h':
-      display_help(argv[0]);
-      logptr.close();
-      remove(log_path);
-      return EXIT_SUCCESS;
-
-    case 'd':
-      tty_device = optarg;
-      sprintf(debug_output, "TTY device set to: %s", tty_device);
-      logprintf(logptr, debug_output, INFO);
-      break;
-
-    case 's':
-      speed = canusb_int_to_speed(atoi(optarg));
-      sprintf(debug_output, "CAN speed set to: %d", atoi(optarg));
-      logprintf(logptr, debug_output, INFO);
-      break;
-
-    case 'b':
-      baudrate = atoi(optarg);
-      sprintf(debug_output, "Baudrate set to: %d", baudrate);
-      logprintf(logptr, debug_output, INFO);
-      break;
-
-    case 'i':
-      inject_id = optarg;
-      sprintf(debug_output, "Inject ID set to: %s", inject_id.c_str());
-      logprintf(logptr, debug_output, INFO);
-      break;
-    
-    case 'r':
-      receive_id = optarg;
-      sprintf(debug_output, "Receive ID set to: %s", receive_id.c_str());
-      logprintf(logptr, debug_output, INFO);
-      break;
-
-    case '?':
-    default:
-      display_help(argv[0]);
-      logptr.close();
-      remove(log_path);
-      return EXIT_FAILURE;
+  int i;
+  int frame_len = sizeof(frame);
+  if ((frame_len >= 6) && (frame[0] == 0xaa) && ((frame[1] >> 4) == 0xc)) {
+    printf("Frame ID: %02x%02x, Data: ", frame[3], frame[2]);
+    for (i = 4; i < frame_len - 1; i++) {
+      printf("%02x ", frame[i]);
     }
-  }
-
-  signal(SIGTERM, sigterm);
-  signal(SIGHUP, sigterm);
-  signal(SIGINT, sigterm);
-
-  if (tty_device == NULL) {
-    fprintf(stderr, "Please specify a TTY!\n");
-    display_help(argv[0]);
-    sprintf(debug_output, "TTY device not specified, exiting.");
-    logprintf(logptr, debug_output, ERROR);
-    return EXIT_FAILURE;
-  }
-
-  if (speed == 0) {
-    fprintf(stderr, "Please specify a valid speed!\n");
-    display_help(argv[0]);
-    sprintf(debug_output, "CAN speed not specified, exiting.");
-    logprintf(logptr, debug_output, ERROR);
-    return EXIT_FAILURE;
-  }
-
-  tty_fd = adapter_init(tty_device, baudrate);
-  if (tty_fd == -1) {
-    sprintf(debug_output, "Failed to initialize adapter, exiting.");
-    logprintf(logptr, debug_output, ERROR);
-    return EXIT_FAILURE;
-  }
-
-  command_settings(tty_fd, speed, CANUSB_MODE_NORMAL, CANUSB_FRAME_STANDARD);
-  sprintf(debug_output, "Adapter initialized successfully.");
-  logprintf(logptr, debug_output, INFO);
-
-  display_logo();
-
-  while (!is_exit) {
-    display_menu(&user_input);
-    sprintf(debug_output, "User input: %c", user_input);
-    logprintf(logptr, debug_output, INFO);
-    switch(user_input) {
-      case '6':
-        logprintf(logptr, "Clearing FRAM", INFO);
-        fprintf(stderr, "Clearing FRAM.\n");
-        send_clear_cmd(tty_fd, inject_id);
-        usleep(100000);
-        receive_frame(tty_fd);
-        break;
-      
-      case '8':
-        logprintf(logptr, "Clearing CANbus buffer", INFO);
-        fprintf(stderr, "Clearing CANbus buffer.\n");
-        clear_buffer(tty_fd);
-        break;
-
-      case '9':
-        logprintf(logptr, "Exiting program", INFO);
-        fprintf(stderr, "Now exiting.\n");
-        is_exit = true;
-        logptr.close();
-        return EXIT_SUCCESS;
-      
-      default:
-        logprintf(logptr, "Unknown command", WARN);
-        fprintf(stderr, "Unknown command received.\n");
-        break;
+    printf("\n");
+  } else {
+    printf("Unknown: ");
+    for (i = 0; i <= frame_len; i++) {
+      printf("%02x ", frame[i]);
     }
+    printf("\n");
   }
-
-  logprintf(logptr, "Unexpected exit of main loop", ERROR);
-  fprintf(stderr, "Unexpected exit of main loop, now exiting.\n");
-  return EXIT_FAILURE;
 }
