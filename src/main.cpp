@@ -111,6 +111,7 @@ static void display_menu(char* user_input);
 static void send_clear_cmd(int tty_fd, string inject_id);
 static void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level);
 static void print_frame(unsigned char *frame);
+static void read_frames_to_file(int tty_fd, char *bin_path, string cmd, int frame_count);
 
 
 
@@ -129,12 +130,13 @@ int main(int argc, char *argv[])
   time_t ts = time(NULL);
   struct tm datetime = *localtime(&ts);
   char time_string[50];
-  strftime(time_string, 50, "%F_%H%Mhrs.log", &datetime);
+  strftime(time_string, 50, "%F_%H%Mhrs", &datetime);
 
   char log_path[PATH_MAX];
   strcpy(log_path, bin_path);
   strcat(log_path, "-logs/");
   strcat(log_path, time_string);
+  strcat(log_path, ".log");
 
   inject_id = CANUSB_INJECT_ID_DEFAULT;
   receive_id = CANUSB_RECEIVE_ID_DEFAULT;
@@ -234,6 +236,7 @@ int main(int argc, char *argv[])
         usleep(100000);
         receive_frame(tty_fd, frame);
         print_frame(frame);
+        read_frames_to_file(tty_fd, bin_path, "clear-fram", 1);
         break;
       
       case '8':
@@ -677,7 +680,7 @@ static void display_logo()
 
 
 
-void display_menu(char* user_input)
+static void display_menu(char* user_input)
 {
   fprintf(stderr, "\n"
     "____________________________________________________________________________________\n"
@@ -701,7 +704,7 @@ void display_menu(char* user_input)
 
 
 
-void send_clear_cmd(int tty_fd, string inject_id)
+static void send_clear_cmd(int tty_fd, string inject_id)
 {
   char data[] = { '0', '1' };
   send_data_frame(tty_fd, inject_id, data);
@@ -710,7 +713,7 @@ void send_clear_cmd(int tty_fd, string inject_id)
 
 
 
-void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level)
+static void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level)
 {
   char time_string[50];
   time_t ts = time(NULL);
@@ -741,7 +744,7 @@ void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level)
 
 
 
-void print_frame(unsigned char *frame)
+static void print_frame(unsigned char *frame)
 {
   int i;
   int frame_len = sizeof(frame);
@@ -758,4 +761,33 @@ void print_frame(unsigned char *frame)
     }
     printf("\n");
   }
+}
+
+
+
+static void read_frames_to_file(int tty_fd, char *bin_path, string cmd, int frame_count)
+{
+  time_t ts = time(NULL);
+  struct tm datetime = *localtime(&ts);
+  char time_string[50];
+  char cmd_string[50];
+  strftime(time_string, 50, "%F_%H%Mhrs%Ssec-", &datetime);
+
+  char dump_path[PATH_MAX];
+  strcpy(dump_path, bin_path);
+  strcat(dump_path, "-dumps/");
+  strcat(dump_path, time_string);
+  sprintf(cmd_string, "%s", cmd.c_str());
+  strcat(dump_path, cmd_string);
+  strcat(dump_path, ".txt");
+
+  ofstream dump_file(dump_path);
+
+  unsigned char frame[32];
+  for (int i = 0; i < frame_count; i++) {
+    receive_frame(tty_fd, frame);
+    dump_file << frame;
+  }
+  dump_file.close();
+  return;
 }
