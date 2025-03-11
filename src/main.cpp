@@ -89,6 +89,8 @@ static int program_running = 1;
 static int print_traffic = 0;
 
 
+char debug_output[4095];
+
 
 static CANUSB_SPEED canusb_int_to_speed(int speed)
 {
@@ -395,8 +397,9 @@ static void receive_frame(int tty_fd)
       return;
       
     } else if (result > 0) {
-      if (print_traffic)
+      if (print_traffic) {
         fprintf(stderr, "%02x ", byte);
+      }
 
       frame[frame_len++] = byte;
 
@@ -588,7 +591,6 @@ int main(int argc, char *argv[])
   CANUSB_SPEED speed = canusb_int_to_speed(CANUSB_CAN_SPEED_DEFAULT);
   int baudrate = CANUSB_TTY_BAUD_RATE_DEFAULT;
   bool is_exit = false;
-  char debug_output[4095];
   string inject_id, receive_id;
 
   char *bin_path(argv[0]);
@@ -606,35 +608,52 @@ int main(int argc, char *argv[])
   inject_id = CANUSB_INJECT_ID_DEFAULT;
   receive_id = CANUSB_RECEIVE_ID_DEFAULT;
 
+  ofstream logptr(log_path);
+  logprintf(logptr, "Program started.", INFO);
+
   while ((c = getopt(argc, argv, "hd:s:b:i:r:")) != -1) {
     switch (c) {
     case 'h':
       display_help(argv[0]);
+      logptr.close();
+      remove(log_path);
       return EXIT_SUCCESS;
 
     case 'd':
       tty_device = optarg;
+      sprintf(debug_output, "TTY device set to: %s", tty_device);
+      logprintf(logptr, debug_output, INFO);
       break;
 
     case 's':
       speed = canusb_int_to_speed(atoi(optarg));
+      sprintf(debug_output, "CAN speed set to: %d", atoi(optarg));
+      logprintf(logptr, debug_output, INFO);
       break;
 
     case 'b':
       baudrate = atoi(optarg);
+      sprintf(debug_output, "Baudrate set to: %d", baudrate);
+      logprintf(logptr, debug_output, INFO);
       break;
 
     case 'i':
       inject_id = optarg;
+      sprintf(debug_output, "Inject ID set to: %s", inject_id.c_str());
+      logprintf(logptr, debug_output, INFO);
       break;
     
     case 'r':
       receive_id = optarg;
+      sprintf(debug_output, "Receive ID set to: %s", receive_id.c_str());
+      logprintf(logptr, debug_output, INFO);
       break;
 
     case '?':
     default:
       display_help(argv[0]);
+      logptr.close();
+      remove(log_path);
       return EXIT_FAILURE;
     }
   }
@@ -646,24 +665,29 @@ int main(int argc, char *argv[])
   if (tty_device == NULL) {
     fprintf(stderr, "Please specify a TTY!\n");
     display_help(argv[0]);
+    sprintf(debug_output, "TTY device not specified, exiting.");
+    logprintf(logptr, debug_output, ERROR);
     return EXIT_FAILURE;
   }
 
   if (speed == 0) {
     fprintf(stderr, "Please specify a valid speed!\n");
     display_help(argv[0]);
+    sprintf(debug_output, "CAN speed not specified, exiting.");
+    logprintf(logptr, debug_output, ERROR);
     return EXIT_FAILURE;
   }
 
   tty_fd = adapter_init(tty_device, baudrate);
   if (tty_fd == -1) {
+    sprintf(debug_output, "Failed to initialize adapter, exiting.");
+    logprintf(logptr, debug_output, ERROR);
     return EXIT_FAILURE;
   }
 
   command_settings(tty_fd, speed, CANUSB_MODE_NORMAL, CANUSB_FRAME_STANDARD);
-
-  ofstream logptr(log_path);
-  logprintf(logptr, "Program started.", INFO);
+  sprintf(debug_output, "Adapter initialized successfully.");
+  logprintf(logptr, debug_output, INFO);
 
   display_logo();
 
@@ -694,11 +718,13 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
       
       default:
+        logprintf(logptr, "Unknown command", WARN);
         fprintf(stderr, "Unknown command received.\n");
         break;
     }
   }
 
+  logprintf(logptr, "Unexpected exit of main loop", ERROR);
   fprintf(stderr, "Unexpected exit of main loop, now exiting.\n");
   return EXIT_FAILURE;
 }
