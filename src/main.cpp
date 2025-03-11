@@ -485,7 +485,6 @@ static void display_help(const char *progname)
   fprintf(stderr, "Usage: %s <options>\n", progname);
   fprintf(stderr, "Options:\n"
      "  -h          Display this help and exit.\n"
-     "  -t          Print TTY/serial traffic debugging info on stderr.\n"
      "  -d DEVICE   Use TTY DEVICE.\n"
      "  -s SPEED    Set CAN SPEED in bps (default: %d).\n"
      "  -b BAUDRATE Set TTY/serial BAUDRATE (default: %d).\n"
@@ -606,15 +605,11 @@ int main(int argc, char *argv[])
   inject_id = CANUSB_INJECT_ID_DEFAULT;
   receive_id = CANUSB_RECEIVE_ID_DEFAULT;
 
-  while ((c = getopt(argc, argv, "htd:s:b:i:r:")) != -1) {
+  while ((c = getopt(argc, argv, "hd:s:b:i:r:")) != -1) {
     switch (c) {
     case 'h':
       display_help(argv[0]);
       return EXIT_SUCCESS;
-
-    case 't':
-      print_traffic++;
-      break;
 
     case 'd':
       tty_device = optarg;
