@@ -109,6 +109,9 @@ static void sigterm(int signo);
 static void display_logo();
 static void display_menu(char* user_input);
 static void send_clear_cmd(int tty_fd, string inject_id);
+static void send_full_dump_cmd(int tty_fd, string inject_id);
+static void send_part_dump_cmd(int tty_fd, string inject_id);
+static void send_update_rtc_cmd(int tty_fd, string inject_id);
 static void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level);
 static void print_frame(unsigned char *frame);
 static void read_frames_to_file(int tty_fd, char *bin_path, string cmd, int frame_count);
@@ -229,6 +232,26 @@ int main(int argc, char *argv[])
     sprintf(debug_output, "User input: %c", user_input);
     logprintf(logptr, debug_output, INFO);
     switch(user_input) {
+      case '1':
+        logprintf(logptr, "Dumping FRAM (32kB) to console", INFO);
+        fprintf(stderr, "Dumping FRAM (32kB) to console.\n");
+        send_full_dump_cmd(tty_fd, inject_id);
+        read_frames_to_file(tty_fd, bin_path, "dump-fram-32kb", 8192);
+        break;
+      
+      case '2':
+        logprintf(logptr, "Dumping FRAM (512B) to console", INFO);
+        fprintf(stderr, "Dumping FRAM (512B) to console.\n");
+        send_part_dump_cmd(tty_fd, inject_id);
+        read_frames_to_file(tty_fd, bin_path, "dump-fram-512b", 128);
+        break;
+      
+      case '4':
+        logprintf(logptr, "Updating RTC", INFO);
+        fprintf(stderr, "Updating RTC.\n");
+        send_update_rtc_cmd(tty_fd, inject_id);
+        break;
+
       case '6':
         logprintf(logptr, "Clearing FRAM", INFO);
         fprintf(stderr, "Clearing FRAM.\n");
@@ -707,6 +730,39 @@ static void display_menu(char* user_input)
 static void send_clear_cmd(int tty_fd, string inject_id)
 {
   char data[] = { '0', '1' };
+  send_data_frame(tty_fd, inject_id, data);
+  return;
+}
+
+
+
+static void send_full_dump_cmd(int tty_fd, string inject_id)
+{
+  char data[] = { '0', '2' };
+  send_data_frame(tty_fd, inject_id, data);
+  return;
+}
+
+
+
+static void send_part_dump_cmd(int tty_fd, string inject_id)
+{
+  char data[] = { '0', '4' };
+  send_data_frame(tty_fd, inject_id, data);
+  return;
+}
+
+
+
+static void send_update_rtc_cmd(int tty_fd, string inject_id)
+{
+  time_t ts = time(NULL);
+  // separate ts into 4 bytes
+  char byte0 = (ts >> 24) & 0xFF;
+  char byte1 = (ts >> 16) & 0xFF;
+  char byte2 = (ts >> 8) & 0xFF;
+  char byte3 = ts & 0xFF;
+  char data[] = { 'A', 'A', byte0, byte1, byte2, byte3 };
   send_data_frame(tty_fd, inject_id, data);
   return;
 }
