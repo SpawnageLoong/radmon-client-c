@@ -488,7 +488,8 @@ static void display_help(const char *progname)
      "  -d DEVICE   Use TTY DEVICE.\n"
      "  -s SPEED    Set CAN SPEED in bps (default: %d).\n"
      "  -b BAUDRATE Set TTY/serial BAUDRATE (default: %d).\n"
-     "  -i ID       Inject using ID (specified as hex string).\n"
+     "  -i SEND_ID  Inject using ID (specified as hex string).\n"
+     "  -r RECV_ID  Receive using ID (specified as hex string).\n"
      "\n",
      CANUSB_CAN_SPEED_DEFAULT,
      CANUSB_TTY_BAUD_RATE_DEFAULT);
