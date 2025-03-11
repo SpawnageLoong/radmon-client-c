@@ -718,7 +718,7 @@ static void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level)
   char time_string[50];
   time_t ts = time(NULL);
   struct tm datetime = *localtime(&ts);
-  strftime(time_string, 50, "%F %H:%M ", &datetime);
+  strftime(time_string, 50, "%F %H:%M:%S ", &datetime);
   std::string print_string(time_string);
   switch(log_level) {
   case 0:
