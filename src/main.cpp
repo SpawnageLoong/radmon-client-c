@@ -125,6 +125,7 @@ int main(int argc, char *argv[])
   CANUSB_SPEED speed = canusb_int_to_speed(CANUSB_CAN_SPEED_DEFAULT);
   int baudrate = CANUSB_TTY_BAUD_RATE_DEFAULT;
   bool is_exit = false;
+  bool is_test_mode = false;
   unsigned char frame[32];
   string inject_id, receive_id;
 
@@ -147,7 +148,7 @@ int main(int argc, char *argv[])
   ofstream logptr(log_path);
   logprintf(logptr, "Program started.", INFO);
 
-  while ((c = getopt(argc, argv, "hd:s:b:i:r:")) != -1) {
+  while ((c = getopt(argc, argv, "hd:s:b:i:r:t:")) != -1) {
     switch (c) {
     case 'h':
       display_help(argv[0]);
@@ -183,6 +184,10 @@ int main(int argc, char *argv[])
       receive_id = optarg;
       sprintf(debug_output, "Receive ID set to: %s", receive_id.c_str());
       logprintf(logptr, debug_output, INFO);
+      break;
+    
+    case 't':
+      is_test_mode = true;
       break;
 
     case '?':
@@ -224,6 +229,17 @@ int main(int argc, char *argv[])
   command_settings(tty_fd, speed, CANUSB_MODE_NORMAL, CANUSB_FRAME_STANDARD);
   sprintf(debug_output, "Adapter initialized successfully.");
   logprintf(logptr, debug_output, INFO);
+
+  if (is_test_mode) {
+    sprintf(debug_output, "Test mode enabled.");
+    logprintf(logptr, debug_output, INFO);
+    logprintf(logptr, "Dumping FRAM (32kB) to console", INFO);
+    fprintf(stderr, "Dumping FRAM (32kB) to console.\n");
+    send_full_dump_cmd(tty_fd, inject_id);
+    read_frames_to_file(tty_fd, bin_path, "dump-fram-32kb", 8192);
+    logptr.close();
+    return EXIT_SUCCESS;
+  }
 
   display_logo();
 
