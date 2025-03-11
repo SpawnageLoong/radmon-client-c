@@ -56,6 +56,7 @@ dkms.conf
 
 # Dump files
 *.dump
+bin/radmon-client-dumps/*.txt
 
 # Program logs
 *.log
