@@ -238,6 +238,10 @@ int main(int argc, char *argv[])
   if (is_test_mode) {
     logprintf(logptr, "Test mode enabled.", INFO);
     usleep(3000000);
+    logprintf(logptr, "Updating RTC", INFO);
+    fprintf(stderr, "Updating RTC.\n");
+    send_update_rtc_cmd(tty_fd, inject_id);
+    usleep(3000000);
     logprintf(logptr, "Running test cycle", INFO);
     fprintf(stderr, "Running test cycle.\n");
     logprintf(logptr, "Sending fill command", INFO);
