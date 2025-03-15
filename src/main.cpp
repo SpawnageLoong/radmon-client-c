@@ -34,6 +34,7 @@
 #include <iostream>
 #include <fstream>
 #include <linux/limits.h>
+#include <iomanip>
 
 using namespace std;
 
@@ -102,7 +103,7 @@ static int hex_value(int c);
 static int convert_from_hex(const char *hex_string, unsigned char *bin_string, int bin_string_len);
 static int send_data_frame(int tty_fd, const string hex_id, const char *hex_data);
 static void clear_buffer(int tty_fd);
-static void receive_frame(int tty_fd, unsigned char *frame_out);
+static void receive_frame(int tty_fd, unsigned char (&frame_out)[32]);
 static int adapter_init(const char *tty_device, int baudrate);
 static void display_help(const char *progname);
 static void sigterm(int signo);
@@ -115,6 +116,8 @@ static void send_update_rtc_cmd(int tty_fd, string inject_id);
 static void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level);
 static void print_frame(unsigned char *frame);
 static void read_frames_to_file(int tty_fd, char *bin_path, string cmd, int frame_count);
+static void save_frame(int tty_fd, ofstream& dump_file);
+static void test_fram(int tty_fd, char *bin_path);
 
 
 
@@ -236,7 +239,7 @@ int main(int argc, char *argv[])
     logprintf(logptr, "Dumping FRAM (32kB) to console", INFO);
     fprintf(stderr, "Dumping FRAM (32kB) to console.\n");
     send_full_dump_cmd(tty_fd, inject_id);
-    read_frames_to_file(tty_fd, bin_path, "dump-fram-32kb", 8192);
+    read_frames_to_file(tty_fd, bin_path, "dump-fram-32kb", 7190);
     logptr.close();
     return EXIT_SUCCESS;
   }
@@ -252,13 +255,15 @@ int main(int argc, char *argv[])
         logprintf(logptr, "Dumping FRAM (32kB) to console", INFO);
         fprintf(stderr, "Dumping FRAM (32kB) to console.\n");
         send_full_dump_cmd(tty_fd, inject_id);
-        read_frames_to_file(tty_fd, bin_path, "dump-fram-32kb", 8192);
+        usleep(100000);
+        read_frames_to_file(tty_fd, bin_path, "dump-fram-32kb", 7190);
         break;
       
       case '2':
         logprintf(logptr, "Dumping FRAM (512B) to console", INFO);
         fprintf(stderr, "Dumping FRAM (512B) to console.\n");
         send_part_dump_cmd(tty_fd, inject_id);
+        usleep(100000);
         read_frames_to_file(tty_fd, bin_path, "dump-fram-512b", 128);
         break;
       
@@ -266,6 +271,7 @@ int main(int argc, char *argv[])
         logprintf(logptr, "Updating RTC", INFO);
         fprintf(stderr, "Updating RTC.\n");
         send_update_rtc_cmd(tty_fd, inject_id);
+        usleep(100000);
         break;
 
       case '6':
@@ -274,14 +280,13 @@ int main(int argc, char *argv[])
         send_clear_cmd(tty_fd, inject_id);
         usleep(100000);
         receive_frame(tty_fd, frame);
-        print_frame(frame);
-        read_frames_to_file(tty_fd, bin_path, "clear-fram", 1);
         break;
       
       case '8':
         logprintf(logptr, "Clearing CANbus buffer", INFO);
         fprintf(stderr, "Clearing CANbus buffer.\n");
         clear_buffer(tty_fd);
+        usleep(100000);
         break;
 
       case '9':
@@ -495,7 +500,7 @@ static int convert_from_hex(const char *hex_string, unsigned char *bin_string, i
 
 
 
-static int send_data_frame(int tty_fd, const string hex_id, const char *hex_data)//CANUSB_FRAME frame, unsigned char id_lsb, unsigned char id_msb, unsigned char data[], int data_length_code)
+static int send_data_frame(int tty_fd, const string hex_id, const char *hex_data)
 {
   int data_len;
   unsigned char binary_data[8];
@@ -593,7 +598,7 @@ static void clear_buffer(int tty_fd)
 
 
 
-static void receive_frame(int tty_fd, unsigned char *frame_out)
+static void receive_frame(int tty_fd, unsigned char (&frame_out)[32])
 {
   int frame_len = 0;
   unsigned char frame[32];
@@ -639,6 +644,10 @@ static void receive_frame(int tty_fd, unsigned char *frame_out)
     printf("Frame recieve error!\n");
   } else {
     print_frame(frame);
+
+    for (int i=0; i<frame_len; i++) {
+      frame_out[i] = frame[i];
+    }
   }
 }
 
@@ -773,12 +782,12 @@ static void send_part_dump_cmd(int tty_fd, string inject_id)
 static void send_update_rtc_cmd(int tty_fd, string inject_id)
 {
   time_t ts = time(NULL);
-  // separate ts into 4 bytes
-  char byte0 = (ts >> 24) & 0xFF;
-  char byte1 = (ts >> 16) & 0xFF;
-  char byte2 = (ts >> 8) & 0xFF;
-  char byte3 = ts & 0xFF;
-  char data[] = { 'A', 'A', byte0, byte1, byte2, byte3 };
+  printf("current time: %ld\n", ts);
+  // separate ts into 8 bytes
+  char hex_string[9];
+  sprintf(hex_string, "%lx", ts);
+  char data[] = { 'A', 'A', hex_string[0], hex_string[1], hex_string[2], hex_string[3], hex_string[4], hex_string[5], hex_string[6], hex_string[7] };
+  //char data[] = { 'A', 'A', '6', '7', 'D', '5', '3', 'F', 'A', 'A' };
   send_data_frame(tty_fd, inject_id, data);
   return;
 }
@@ -822,7 +831,7 @@ static void print_frame(unsigned char *frame)
   int frame_len = sizeof(frame);
   if ((frame_len >= 6) && (frame[0] == 0xaa) && ((frame[1] >> 4) == 0xc)) {
     printf("Frame ID: %02x%02x, Data: ", frame[3], frame[2]);
-    for (i = 4; i < frame_len - 1; i++) {
+    for (i = 4; i < 12; i++) {
       printf("%02x ", frame[i]);
     }
     printf("\n");
@@ -855,11 +864,78 @@ static void read_frames_to_file(int tty_fd, char *bin_path, string cmd, int fram
 
   ofstream dump_file(dump_path);
 
-  unsigned char frame[32];
   for (int i = 0; i < frame_count; i++) {
-    receive_frame(tty_fd, frame);
-    dump_file << frame;
+    save_frame(tty_fd, dump_file);
   }
   dump_file.close();
   return;
+}
+
+
+
+static void save_frame(int tty_fd, ofstream& dump_file)
+{
+  int frame_len = 0;
+  unsigned char frame[32];
+
+  int result, checksum;
+  unsigned char byte;
+
+  int is_frame_complete = 0;
+
+  frame_len = 0;
+  while (!is_frame_complete) {
+    result = read(tty_fd, &byte, 1);
+    if (result == -1) {
+      fprintf(stderr, "read() failed: %s\n", strerror(errno));
+      return;
+      
+    } else if (result > 0) {
+      if (print_traffic) {
+        fprintf(stderr, "%02x ", byte);
+      }
+
+      frame[frame_len++] = byte;
+
+      if (frame_is_complete(frame, frame_len)) {
+        is_frame_complete = 1;
+        break;
+      }
+    } else {
+      return;
+    }
+    usleep(2);
+  }
+
+  if ((frame_len == 20) && (frame[0] == 0xaa) && (frame[1] == 0x55)) {
+    checksum = generate_checksum(&frame[2], 17);
+    if (checksum != frame[frame_len - 1]) {
+      fprintf(stderr, "receive_frame() failed: Checksum incorrect\n");
+      return;
+    }
+  }
+
+  if (frame_len == -1) {
+    printf("Frame recieve error!\n");
+  } else {
+    if ((frame_len >= 6) && (frame[0] == 0xaa) && ((frame[1] >> 4) == 0xc)) {
+      printf("Frame ID: %02x%02x, Data: ", frame[3], frame[2]);
+      dump_file << "Frame ID: " << hex << (int)frame[3] << (int)frame[2] << dec << ", Data: ";
+      for (int i = 4; i < 12; i++) {
+        printf("%02x ", (int)frame[i]);
+        dump_file << hex << setw(2) << setfill('0') << (int)frame[i] << dec << " ";
+      }
+      printf("\n");
+      dump_file << "\n" << ends;
+    } else {
+      printf("Unknown: ");
+      dump_file << "Unknown: ";
+      for (int i = 0; i <= frame_len; i++) {
+        printf("%02x ", frame[i]);
+        dump_file << hex << (int)frame[i] << dec << " ";
+      }
+      printf("\n");
+      dump_file << "\n";
+    }
+  }
 }

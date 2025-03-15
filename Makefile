@@ -1,8 +1,8 @@
 CC = g++
-CFLAGS = -Wall -g -O0
+CXXFLAGS = -Wall -g -O0 -std=c++20
 
 bin/radmon-client:src/main.cpp
-	    $(CC) $(CFLAGS) -o $@ $^
+	    $(CC) $(CXXFLAGS) -o $@ $^
 
 clean:
 	    $(RM) bin/radmon-client .*.sw?
