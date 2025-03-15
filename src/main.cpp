@@ -118,7 +118,6 @@ static void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level);
 static void print_frame(unsigned char *frame);
 static void read_frames_to_file(int tty_fd, char *bin_path, string cmd, int frame_count);
 static void save_frame(int tty_fd, ofstream& dump_file);
-static void test_fram(int tty_fd, char *bin_path);
 
 
 
@@ -235,12 +234,22 @@ int main(int argc, char *argv[])
   logprintf(logptr, debug_output, INFO);
 
   if (is_test_mode) {
-    sprintf(debug_output, "Test mode enabled.");
-    logprintf(logptr, debug_output, INFO);
-    logprintf(logptr, "Dumping FRAM (32kB) to console", INFO);
-    fprintf(stderr, "Dumping FRAM (32kB) to console.\n");
+    //sprintf(debug_output, "Test mode enabled.");
+    logprintf(logptr, "Test mode enabled.", INFO);
+    logprintf(logptr, "Running test cycle", INFO);
+    fprintf(stderr, "Running test cycle.\n");
+    send_fill_cmd(tty_fd, inject_id);
+    usleep(100000);
     send_full_dump_cmd(tty_fd, inject_id);
-    read_frames_to_file(tty_fd, bin_path, "dump-fram-32kb", 7190);
+    usleep(100000);
+    read_frames_to_file(tty_fd, bin_path, "test-cycle-fill", 7190);
+    usleep(100000);
+    send_clear_cmd(tty_fd, inject_id);
+    usleep(100000);
+    send_full_dump_cmd(tty_fd, inject_id);
+    usleep(100000);
+    read_frames_to_file(tty_fd, bin_path, "test-cycle-clear", 7190);
+    usleep(100000);
     logptr.close();
     return EXIT_SUCCESS;
   }
@@ -291,13 +300,22 @@ int main(int argc, char *argv[])
         receive_frame(tty_fd, frame);
         break;
 
-      /*case '8':
-        logprintf(logptr, "Clearing FRAM", INFO);
-        fprintf(stderr, "Clearing FRAM.\n");
+      case '8':
+        logprintf(logptr, "Running test cycle", INFO);
+        fprintf(stderr, "Running test cycle.\n");
+        send_fill_cmd(tty_fd, inject_id);
+        usleep(100000);
+        send_full_dump_cmd(tty_fd, inject_id);
+        usleep(100000);
+        read_frames_to_file(tty_fd, bin_path, "test-cycle-fill", 7190);
+        usleep(100000);
         send_clear_cmd(tty_fd, inject_id);
         usleep(100000);
-        receive_frame(tty_fd, frame);
-        break;*/
+        send_full_dump_cmd(tty_fd, inject_id);
+        usleep(100000);
+        read_frames_to_file(tty_fd, bin_path, "test-cycle-clear", 7190);
+        usleep(100000);
+        break;
       
       case '9':
         logprintf(logptr, "Clearing CANbus buffer", INFO);
@@ -966,11 +984,4 @@ static void save_frame(int tty_fd, ofstream& dump_file)
       dump_file << "\n";
     }
   }
-}
-
-
-
-static void test_fram(int tty_fd, char *bin_path)
-{
-
 }
