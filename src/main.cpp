@@ -110,6 +110,7 @@ static void sigterm(int signo);
 static void display_logo();
 static void display_menu(char* user_input);
 static void send_clear_cmd(int tty_fd, string inject_id);
+static void send_fill_cmd(int tty_fd, string inject_id);
 static void send_full_dump_cmd(int tty_fd, string inject_id);
 static void send_part_dump_cmd(int tty_fd, string inject_id);
 static void send_update_rtc_cmd(int tty_fd, string inject_id);
@@ -281,15 +282,31 @@ int main(int argc, char *argv[])
         usleep(100000);
         receive_frame(tty_fd, frame);
         break;
+
+      case '7':
+        logprintf(logptr, "Filling FRAM", INFO);
+        fprintf(stderr, "Filling FRAM.\n");
+        send_fill_cmd(tty_fd, inject_id);
+        usleep(100000);
+        receive_frame(tty_fd, frame);
+        break;
+
+      /*case '8':
+        logprintf(logptr, "Clearing FRAM", INFO);
+        fprintf(stderr, "Clearing FRAM.\n");
+        send_clear_cmd(tty_fd, inject_id);
+        usleep(100000);
+        receive_frame(tty_fd, frame);
+        break;*/
       
-      case '8':
+      case '9':
         logprintf(logptr, "Clearing CANbus buffer", INFO);
         fprintf(stderr, "Clearing CANbus buffer.\n");
         clear_buffer(tty_fd);
         usleep(100000);
         break;
 
-      case '9':
+      case '0':
         logprintf(logptr, "Exiting program", INFO);
         fprintf(stderr, "Now exiting.\n");
         is_exit = true;
@@ -739,9 +756,11 @@ static void display_menu(char* user_input)
     "  4) Update RTC\n"
     "\n"
     "  6) Clear FRAM\n"
+    "  7) Fill FRAM\n"
+    "  8) Test cycle (will clear FRAM)\n"
     "\n"
-    "  8) Clear CAN buffer\n"
-    "  9) Exit\n"
+    "  9) Clear CAN buffer\n"
+    "  0) Exit\n"
     "\n"
     "Enter a number 1-9: ");
   
@@ -755,6 +774,15 @@ static void display_menu(char* user_input)
 static void send_clear_cmd(int tty_fd, string inject_id)
 {
   char data[] = { '0', '1' };
+  send_data_frame(tty_fd, inject_id, data);
+  return;
+}
+
+
+
+static void send_fill_cmd(int tty_fd, string inject_id)
+{
+  char data[] = { 'E', 'F' };
   send_data_frame(tty_fd, inject_id, data);
   return;
 }
@@ -938,4 +966,11 @@ static void save_frame(int tty_fd, ofstream& dump_file)
       dump_file << "\n";
     }
   }
+}
+
+
+
+static void test_fram(int tty_fd, char *bin_path)
+{
+
 }
