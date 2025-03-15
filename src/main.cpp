@@ -117,7 +117,7 @@ static void send_update_rtc_cmd(int tty_fd, string inject_id);
 static void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level);
 static void print_frame(unsigned char *frame);
 static void read_frames_to_file(int tty_fd, char *bin_path, string cmd, int frame_count);
-static void save_frame(int tty_fd, ofstream& dump_file);
+static void save_frame(int tty_fd, ofstream& dump_file, int& i, bool& is_prev_frame_unknown);
 
 
 
@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
   ofstream logptr(log_path);
   logprintf(logptr, "Program started.", INFO);
 
-  while ((c = getopt(argc, argv, "hd:s:b:i:r:t:")) != -1) {
+  while ((c = getopt(argc, argv, "htd:s:b:i:r:")) != -1) {
     switch (c) {
     case 'h':
       display_help(argv[0]);
@@ -233,28 +233,38 @@ int main(int argc, char *argv[])
   sprintf(debug_output, "Adapter initialized successfully.");
   logprintf(logptr, debug_output, INFO);
 
+  display_logo();
+
   if (is_test_mode) {
-    //sprintf(debug_output, "Test mode enabled.");
     logprintf(logptr, "Test mode enabled.", INFO);
+    usleep(3000000);
     logprintf(logptr, "Running test cycle", INFO);
     fprintf(stderr, "Running test cycle.\n");
+    logprintf(logptr, "Sending fill command", INFO);
+    fprintf(stderr, "Sending fill command.\n");
     send_fill_cmd(tty_fd, inject_id);
-    usleep(100000);
+    usleep(10000000);
+    logprintf(logptr, "Sending dump command", INFO);
+    fprintf(stderr, "Sending dump command.\n");
     send_full_dump_cmd(tty_fd, inject_id);
-    usleep(100000);
-    read_frames_to_file(tty_fd, bin_path, "test-cycle-fill", 7190);
-    usleep(100000);
+    usleep(1000000);
+    read_frames_to_file(tty_fd, bin_path, "test-cycle-fill", 8193);
+    usleep(1000000);
+    logprintf(logptr, "Sending clear command", INFO);
+    fprintf(stderr, "Sending clear command.\n");
     send_clear_cmd(tty_fd, inject_id);
-    usleep(100000);
+    usleep(10000000);
+    logprintf(logptr, "Sending dump command", INFO);
+    fprintf(stderr, "Sending dump command.\n");
     send_full_dump_cmd(tty_fd, inject_id);
-    usleep(100000);
-    read_frames_to_file(tty_fd, bin_path, "test-cycle-clear", 7190);
-    usleep(100000);
+    usleep(1000000);
+    read_frames_to_file(tty_fd, bin_path, "test-cycle-clear", 8193);
+    usleep(1000000);
+    logprintf(logptr, "Test cycle complete", INFO);
+    fprintf(stderr, "Test cycle complete.\n");
     logptr.close();
     return EXIT_SUCCESS;
   }
-
-  display_logo();
 
   while (!is_exit) {
     display_menu(&user_input);
@@ -266,7 +276,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Dumping FRAM (32kB) to console.\n");
         send_full_dump_cmd(tty_fd, inject_id);
         usleep(100000);
-        read_frames_to_file(tty_fd, bin_path, "dump-fram-32kb", 7190);
+        read_frames_to_file(tty_fd, bin_path, "dump-fram-32kb", 8193);
         break;
       
       case '2':
@@ -303,18 +313,28 @@ int main(int argc, char *argv[])
       case '8':
         logprintf(logptr, "Running test cycle", INFO);
         fprintf(stderr, "Running test cycle.\n");
+        logprintf(logptr, "Sending fill command", INFO);
+        fprintf(stderr, "Sending fill command.\n");
         send_fill_cmd(tty_fd, inject_id);
-        usleep(100000);
+        usleep(5000000);
+        logprintf(logptr, "Sending dump command", INFO);
+        fprintf(stderr, "Sending dump command.\n");
         send_full_dump_cmd(tty_fd, inject_id);
-        usleep(100000);
-        read_frames_to_file(tty_fd, bin_path, "test-cycle-fill", 7190);
-        usleep(100000);
+        usleep(1000000);
+        read_frames_to_file(tty_fd, bin_path, "test-cycle-fill", 8193);
+        usleep(1000000);
+        logprintf(logptr, "Sending clear command", INFO);
+        fprintf(stderr, "Sending clear command.\n");
         send_clear_cmd(tty_fd, inject_id);
-        usleep(100000);
+        usleep(5000000);
+        logprintf(logptr, "Sending dump command", INFO);
+        fprintf(stderr, "Sending dump command.\n");
         send_full_dump_cmd(tty_fd, inject_id);
-        usleep(100000);
-        read_frames_to_file(tty_fd, bin_path, "test-cycle-clear", 7190);
-        usleep(100000);
+        usleep(1000000);
+        read_frames_to_file(tty_fd, bin_path, "test-cycle-clear", 8193);
+        usleep(1000000);
+        logprintf(logptr, "Test cycle complete", INFO);
+        fprintf(stderr, "Test cycle complete.\n");
         break;
       
       case '9':
@@ -780,7 +800,7 @@ static void display_menu(char* user_input)
     "  9) Clear CAN buffer\n"
     "  0) Exit\n"
     "\n"
-    "Enter a number 1-9: ");
+    "Enter a number 0-9: ");
   
   scanf("%c", user_input);
   getchar(); // reads the /n character to ignore it.
@@ -910,16 +930,25 @@ static void read_frames_to_file(int tty_fd, char *bin_path, string cmd, int fram
 
   ofstream dump_file(dump_path);
 
+  /*
   for (int i = 0; i < frame_count; i++) {
     save_frame(tty_fd, dump_file);
   }
+  */
+
+  int i = 0;
+  bool is_prev_frame_unknown = false;
+  while (i < frame_count) {
+    save_frame(tty_fd, dump_file, i, is_prev_frame_unknown);
+  }
+
   dump_file.close();
   return;
 }
 
 
 
-static void save_frame(int tty_fd, ofstream& dump_file)
+static void save_frame(int tty_fd, ofstream& dump_file, int& i, bool& is_prev_frame_unknown)
 {
   int frame_len = 0;
   unsigned char frame[32];
@@ -934,6 +963,7 @@ static void save_frame(int tty_fd, ofstream& dump_file)
     result = read(tty_fd, &byte, 1);
     if (result == -1) {
       fprintf(stderr, "read() failed: %s\n", strerror(errno));
+      i++;
       return;
       
     } else if (result > 0) {
@@ -948,6 +978,7 @@ static void save_frame(int tty_fd, ofstream& dump_file)
         break;
       }
     } else {
+      i++;
       return;
     }
     usleep(2);
@@ -967,21 +998,27 @@ static void save_frame(int tty_fd, ofstream& dump_file)
     if ((frame_len >= 6) && (frame[0] == 0xaa) && ((frame[1] >> 4) == 0xc)) {
       printf("Frame ID: %02x%02x, Data: ", frame[3], frame[2]);
       dump_file << "Frame ID: " << hex << (int)frame[3] << (int)frame[2] << dec << ", Data: ";
-      for (int i = 4; i < 12; i++) {
-        printf("%02x ", (int)frame[i]);
-        dump_file << hex << setw(2) << setfill('0') << (int)frame[i] << dec << " ";
+      for (int j = 4; j < 12; j++) {
+        printf("%02x ", (int)frame[j]);
+        dump_file << hex << setw(2) << setfill('0') << (int)frame[j] << dec << " ";
       }
       printf("\n");
       dump_file << "\n" << ends;
+      i++;
+      is_prev_frame_unknown = false;
     } else {
       printf("Unknown: ");
       dump_file << "Unknown: ";
-      for (int i = 0; i <= frame_len; i++) {
-        printf("%02x ", frame[i]);
-        dump_file << hex << (int)frame[i] << dec << " ";
+      for (int j = 0; j <= frame_len; j++) {
+        printf("%02x ", frame[j]);
+        dump_file << hex << (int)frame[j] << dec << " ";
       }
       printf("\n");
       dump_file << "\n";
+      if (!is_prev_frame_unknown) {
+        i++;
+      }
+      is_prev_frame_unknown = true;
     }
   }
 }
