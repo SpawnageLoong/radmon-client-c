@@ -288,6 +288,8 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Sending dump command.\n");
     send_full_dump_cmd(tty_fd, inject_id);
     usleep(1000000);
+    read_frames_to_file(tty_fd, bin_path, "test-cycle-dump", 8193);
+    usleep(1000000);
     logger.log("Sending fill command.", INFO);
     fprintf(stderr, "Sending fill command.\n");
     send_fill_cmd(tty_fd, inject_id);
@@ -365,6 +367,8 @@ int main(int argc, char *argv[])
         logger.log("Sending dump command.", INFO);
         fprintf(stderr, "Sending dump command.\n");
         send_full_dump_cmd(tty_fd, inject_id);
+        usleep(1000000);
+        read_frames_to_file(tty_fd, bin_path, "test-cycle-dump", 8193);
         usleep(1000000);
         logger.log("Sending fill command", INFO);
         fprintf(stderr, "Sending fill command.\n");
