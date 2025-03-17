@@ -485,20 +485,31 @@ static int frame_is_complete(const unsigned char *frame, int frame_len)
 static int frame_send(int tty_fd, const unsigned char *frame, int frame_len)
 {
   int result, i;
+  char temp_string[4095];
 
   if (print_traffic) {
     printf(">>> ");
+    sprintf(debug_output, ">>> ");
     for (i = 0; i < frame_len; i++) {
       printf("%02x ", frame[i]);
+      sprintf(temp_string, "%02x ", frame[i]);
+      strcat(debug_output, temp_string);
     }
     if (print_traffic > 1) {
       printf("    '");
+      sprintf(temp_string, "    '");
+      strcat(debug_output, temp_string);
       for (i = 4; i < frame_len - 1; i++) {
         printf("%c", isalnum(frame[i]) ? frame[i] : '.');
+        sprintf(temp_string, "%c", isalnum(frame[i]) ? frame[i] : '.');
+        strcat(debug_output, temp_string);
       }
       printf("'");
+      sprintf(temp_string, "'");
+      strcat(debug_output, temp_string);
     }
     printf("\n");
+    logger.log(debug_output, INFO);
   }
 
   result = write(tty_fd, frame, frame_len);
