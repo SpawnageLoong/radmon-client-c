@@ -114,10 +114,45 @@ static void send_fill_cmd(int tty_fd, string inject_id);
 static void send_full_dump_cmd(int tty_fd, string inject_id);
 static void send_part_dump_cmd(int tty_fd, string inject_id);
 static void send_update_rtc_cmd(int tty_fd, string inject_id);
-static void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level);
 static void print_frame(unsigned char *frame);
 static void read_frames_to_file(int tty_fd, char *bin_path, string cmd, int frame_count);
 static void save_frame(int tty_fd, ofstream& dump_file, int& i, bool& is_prev_frame_unknown);
+
+
+
+class LoggerClass {
+  public:
+    ofstream log_file;
+    LoggerClass(char* log_path) {
+      log_file.open(log_path);
+    }
+    void log(string string, LOGGING_LEVEL log_level) {
+      char time_string[50];
+      time_t ts = time(NULL);
+      struct tm datetime = *localtime(&ts);
+      strftime(time_string, 50, "%F %H:%M:%S ", &datetime);
+      std::string print_string(time_string);
+      switch(log_level) {
+      case 0:
+        print_string.append("\033[1;37m[INFO] ");
+        break;
+      
+      case 1:
+        print_string.append("\033[1;33m[WARN] ");
+        break;
+
+      case 2:
+        print_string.append("\033[1;31m[ERROR] ");
+        break;
+      }
+
+      print_string.append(string).append("\033[0m\n");
+      log_file << print_string;
+    }
+    ~LoggerClass() {
+      log_file.close();
+    }
+};
 
 
 
@@ -148,45 +183,44 @@ int main(int argc, char *argv[])
   inject_id = CANUSB_INJECT_ID_DEFAULT;
   receive_id = CANUSB_RECEIVE_ID_DEFAULT;
 
-  ofstream logptr(log_path);
-  logprintf(logptr, "Program started.", INFO);
+  LoggerClass logger(log_path);
+  logger.log("Program started.", INFO);
 
   while ((c = getopt(argc, argv, "htd:s:b:i:r:")) != -1) {
     switch (c) {
     case 'h':
       display_help(argv[0]);
-      logptr.close();
-      remove(log_path);
+      logger.log("Help displayed, exiting.", INFO);
       return EXIT_SUCCESS;
 
     case 'd':
       tty_device = optarg;
       sprintf(debug_output, "TTY device set to: %s", tty_device);
-      logprintf(logptr, debug_output, INFO);
+      logger.log(debug_output, INFO);
       break;
 
     case 's':
       speed = canusb_int_to_speed(atoi(optarg));
       sprintf(debug_output, "CAN speed set to: %d", atoi(optarg));
-      logprintf(logptr, debug_output, INFO);
+      logger.log(debug_output, INFO);
       break;
 
     case 'b':
       baudrate = atoi(optarg);
       sprintf(debug_output, "Baudrate set to: %d", baudrate);
-      logprintf(logptr, debug_output, INFO);
+      logger.log(debug_output, INFO);
       break;
 
     case 'i':
       inject_id = optarg;
       sprintf(debug_output, "Inject ID set to: %s", inject_id.c_str());
-      logprintf(logptr, debug_output, INFO);
+      logger.log(debug_output, INFO);
       break;
     
     case 'r':
       receive_id = optarg;
       sprintf(debug_output, "Receive ID set to: %s", receive_id.c_str());
-      logprintf(logptr, debug_output, INFO);
+      logger.log(debug_output, INFO);
       break;
     
     case 't':
@@ -196,7 +230,6 @@ int main(int argc, char *argv[])
     case '?':
     default:
       display_help(argv[0]);
-      logptr.close();
       remove(log_path);
       return EXIT_FAILURE;
     }
@@ -210,7 +243,7 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Please specify a TTY!\n");
     display_help(argv[0]);
     sprintf(debug_output, "TTY device not specified, exiting.");
-    logprintf(logptr, debug_output, ERROR);
+    logger.log(debug_output, ERROR);
     return EXIT_FAILURE;
   }
 
@@ -218,65 +251,64 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Please specify a valid speed!\n");
     display_help(argv[0]);
     sprintf(debug_output, "CAN speed not specified, exiting.");
-    logprintf(logptr, debug_output, ERROR);
+    logger.log(debug_output, ERROR);
     return EXIT_FAILURE;
   }
 
   tty_fd = adapter_init(tty_device, baudrate);
   if (tty_fd == -1) {
     sprintf(debug_output, "Failed to initialize adapter, exiting.");
-    logprintf(logptr, debug_output, ERROR);
+    logger.log(debug_output, ERROR);
     return EXIT_FAILURE;
   }
 
   command_settings(tty_fd, speed, CANUSB_MODE_NORMAL, CANUSB_FRAME_STANDARD);
   sprintf(debug_output, "Adapter initialized successfully.");
-  logprintf(logptr, debug_output, INFO);
+  logger.log(debug_output, INFO);
 
   display_logo();
 
   if (is_test_mode) {
-    logprintf(logptr, "Test mode enabled.", INFO);
+    logger.log("Test mode enabled.", INFO);
     usleep(3000000);
-    logprintf(logptr, "Updating RTC", INFO);
+    logger.log("Updating RTC.", INFO);
     fprintf(stderr, "Updating RTC.\n");
     send_update_rtc_cmd(tty_fd, inject_id);
     usleep(3000000);
-    logprintf(logptr, "Running test cycle", INFO);
+    logger.log("Running test cycle.", INFO);
     fprintf(stderr, "Running test cycle.\n");
-    logprintf(logptr, "Sending fill command", INFO);
+    logger.log("Sending fill command.", INFO);
     fprintf(stderr, "Sending fill command.\n");
     send_fill_cmd(tty_fd, inject_id);
     usleep(10000000);
-    logprintf(logptr, "Sending dump command", INFO);
+    logger.log("Sending dump command.", INFO);
     fprintf(stderr, "Sending dump command.\n");
     send_full_dump_cmd(tty_fd, inject_id);
     usleep(1000000);
     read_frames_to_file(tty_fd, bin_path, "test-cycle-fill", 8193);
     usleep(1000000);
-    logprintf(logptr, "Sending clear command", INFO);
+    logger.log("Sending clear command.", INFO);
     fprintf(stderr, "Sending clear command.\n");
     send_clear_cmd(tty_fd, inject_id);
     usleep(10000000);
-    logprintf(logptr, "Sending dump command", INFO);
+    logger.log("Sending dump command.", INFO);
     fprintf(stderr, "Sending dump command.\n");
     send_full_dump_cmd(tty_fd, inject_id);
     usleep(1000000);
     read_frames_to_file(tty_fd, bin_path, "test-cycle-clear", 8193);
     usleep(1000000);
-    logprintf(logptr, "Test cycle complete", INFO);
+    logger.log("Test cycle complete.", INFO);
     fprintf(stderr, "Test cycle complete.\n");
-    logptr.close();
     return EXIT_SUCCESS;
   }
 
   while (!is_exit) {
     display_menu(&user_input);
     sprintf(debug_output, "User input: %c", user_input);
-    logprintf(logptr, debug_output, INFO);
+    logger.log(debug_output, INFO);
     switch(user_input) {
       case '1':
-        logprintf(logptr, "Dumping FRAM (32kB) to console", INFO);
+        logger.log("Dumping FRAM (32kB) to console", INFO);
         fprintf(stderr, "Dumping FRAM (32kB) to console.\n");
         send_full_dump_cmd(tty_fd, inject_id);
         usleep(100000);
@@ -284,7 +316,7 @@ int main(int argc, char *argv[])
         break;
       
       case '2':
-        logprintf(logptr, "Dumping FRAM (512B) to console", INFO);
+        logger.log("Dumping FRAM (512B) to console", INFO);
         fprintf(stderr, "Dumping FRAM (512B) to console.\n");
         send_part_dump_cmd(tty_fd, inject_id);
         usleep(100000);
@@ -292,14 +324,14 @@ int main(int argc, char *argv[])
         break;
       
       case '4':
-        logprintf(logptr, "Updating RTC", INFO);
+        logger.log("Updating RTC", INFO);
         fprintf(stderr, "Updating RTC.\n");
         send_update_rtc_cmd(tty_fd, inject_id);
         usleep(100000);
         break;
 
       case '6':
-        logprintf(logptr, "Clearing FRAM", INFO);
+        logger.log("Clearing FRAM", INFO);
         fprintf(stderr, "Clearing FRAM.\n");
         send_clear_cmd(tty_fd, inject_id);
         usleep(100000);
@@ -307,7 +339,7 @@ int main(int argc, char *argv[])
         break;
 
       case '7':
-        logprintf(logptr, "Filling FRAM", INFO);
+        logger.log("Filling FRAM", INFO);
         fprintf(stderr, "Filling FRAM.\n");
         send_fill_cmd(tty_fd, inject_id);
         usleep(100000);
@@ -315,54 +347,53 @@ int main(int argc, char *argv[])
         break;
 
       case '8':
-        logprintf(logptr, "Running test cycle", INFO);
+        logger.log("Running test cycle", INFO);
         fprintf(stderr, "Running test cycle.\n");
-        logprintf(logptr, "Sending fill command", INFO);
+        logger.log("Sending fill command", INFO);
         fprintf(stderr, "Sending fill command.\n");
         send_fill_cmd(tty_fd, inject_id);
         usleep(5000000);
-        logprintf(logptr, "Sending dump command", INFO);
+        logger.log("Sending dump command", INFO);
         fprintf(stderr, "Sending dump command.\n");
         send_full_dump_cmd(tty_fd, inject_id);
         usleep(1000000);
         read_frames_to_file(tty_fd, bin_path, "test-cycle-fill", 8193);
         usleep(1000000);
-        logprintf(logptr, "Sending clear command", INFO);
+        logger.log("Sending clear command", INFO);
         fprintf(stderr, "Sending clear command.\n");
         send_clear_cmd(tty_fd, inject_id);
         usleep(5000000);
-        logprintf(logptr, "Sending dump command", INFO);
+        logger.log("Sending dump command", INFO);
         fprintf(stderr, "Sending dump command.\n");
         send_full_dump_cmd(tty_fd, inject_id);
         usleep(1000000);
         read_frames_to_file(tty_fd, bin_path, "test-cycle-clear", 8193);
         usleep(1000000);
-        logprintf(logptr, "Test cycle complete", INFO);
+        logger.log("Test cycle complete", INFO);
         fprintf(stderr, "Test cycle complete.\n");
         break;
       
       case '9':
-        logprintf(logptr, "Clearing CANbus buffer", INFO);
+        logger.log("Clearing CANbus buffer", INFO);
         fprintf(stderr, "Clearing CANbus buffer.\n");
         clear_buffer(tty_fd);
         usleep(100000);
         break;
 
       case '0':
-        logprintf(logptr, "Exiting program", INFO);
+        logger.log("Exiting program", INFO);
         fprintf(stderr, "Now exiting.\n");
         is_exit = true;
-        logptr.close();
         return EXIT_SUCCESS;
       
       default:
-        logprintf(logptr, "Unknown command", WARN);
+        logger.log("Unknown command", WARN);
         fprintf(stderr, "Unknown command received.\n");
         break;
     }
   }
 
-  logprintf(logptr, "Unexpected exit of main loop", ERROR);
+  logger.log("Unexpected exit of main loop", ERROR);
   fprintf(stderr, "Unexpected exit of main loop, now exiting.\n");
   return EXIT_FAILURE;
 }
@@ -860,37 +891,6 @@ static void send_update_rtc_cmd(int tty_fd, string inject_id)
   //char data[] = { 'A', 'A', '6', '7', 'D', '5', '3', 'F', 'A', 'A' };
   send_data_frame(tty_fd, inject_id, data);
   return;
-}
-
-
-
-static void logprintf(ofstream &logptr, string string, LOGGING_LEVEL log_level)
-{
-  char time_string[50];
-  time_t ts = time(NULL);
-  struct tm datetime = *localtime(&ts);
-  strftime(time_string, 50, "%F %H:%M:%S ", &datetime);
-  std::string print_string(time_string);
-  switch(log_level) {
-  case 0:
-    //strcat(print_string, "\033[1;37m[INFO] ");
-    print_string.append("\033[1;37m[INFO] ");
-    break;
-  
-  case 1:
-    //strcat(print_string, "\033[1;33m[WARN] ");
-    print_string.append("\033[1;33m[WARN] ");
-    break;
-
-  case 2:
-    //strcat(print_string, "\033[1;31m[ERROR] ");
-    print_string.append("\033[1;31m[ERROR] ");
-    break;
-  }
-  //strcat(print_string, string);
-  //strcat(print_string, "\033[0m");
-  print_string.append(string).append("\033[0m\n");
-  logptr << print_string;
 }
 
 
