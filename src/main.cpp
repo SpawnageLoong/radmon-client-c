@@ -85,12 +85,55 @@ typedef enum {
   ERROR   = 2,
 } LOGGING_LEVEL;
 
+class LoggerClass {
+  public:
+    ofstream log_file;
+    void set_log_path(char* log_path) {
+      if (log_file.is_open()) {
+        log_file.close();
+      }
+      log_file.open(log_path);
+    }
+    void log(string string, LOGGING_LEVEL log_level) {
+      if (!log_file.is_open()) {
+        fprintf(stderr, "Log file not open!\n");
+        return;
+      }
+      char time_string[50];
+      time_t ts = time(NULL);
+      struct tm datetime = *localtime(&ts);
+      strftime(time_string, 50, "%F %H:%M:%S ", &datetime);
+      std::string print_string(time_string);
+      switch(log_level) {
+      case 0:
+        print_string.append("\033[1;37m[INFO] ");
+        break;
+      
+      case 1:
+        print_string.append("\033[1;33m[WARN] ");
+        break;
+
+      case 2:
+        print_string.append("\033[1;31m[ERROR] ");
+        break;
+      }
+
+      print_string.append(string).append("\033[0m\n");
+      log_file << print_string;
+    }
+    ~LoggerClass() {
+      if (log_file.is_open()) {
+        log_file.close();
+      }
+    }
+};
 
 // Global Variables
 static int program_running = 1;
 static int print_traffic = 0;
 
 char debug_output[4095];
+LoggerClass logger;
 
 
 // Function Prototypes
@@ -117,42 +160,6 @@ static void send_update_rtc_cmd(int tty_fd, string inject_id);
 static void print_frame(unsigned char *frame);
 static void read_frames_to_file(int tty_fd, char *bin_path, string cmd, int frame_count);
 static void save_frame(int tty_fd, ofstream& dump_file, int& i, bool& is_prev_frame_unknown);
-
-
-
-class LoggerClass {
-  public:
-    ofstream log_file;
-    LoggerClass(char* log_path) {
-      log_file.open(log_path);
-    }
-    void log(string string, LOGGING_LEVEL log_level) {
-      char time_string[50];
-      time_t ts = time(NULL);
-      struct tm datetime = *localtime(&ts);
-      strftime(time_string, 50, "%F %H:%M:%S ", &datetime);
-      std::string print_string(time_string);
-      switch(log_level) {
-      case 0:
-        print_string.append("\033[1;37m[INFO] ");
-        break;
-      
-      case 1:
-        print_string.append("\033[1;33m[WARN] ");
-        break;
-
-      case 2:
-        print_string.append("\033[1;31m[ERROR] ");
-        break;
-      }
-
-      print_string.append(string).append("\033[0m\n");
-      log_file << print_string;
-    }
-    ~LoggerClass() {
-      log_file.close();
-    }
-};
 
 
 
@@ -183,7 +190,7 @@ int main(int argc, char *argv[])
   inject_id = CANUSB_INJECT_ID_DEFAULT;
   receive_id = CANUSB_RECEIVE_ID_DEFAULT;
 
-  LoggerClass logger(log_path);
+  logger.set_log_path(log_path);
   logger.log("Program started.", INFO);
 
   while ((c = getopt(argc, argv, "htd:s:b:i:r:")) != -1) {
