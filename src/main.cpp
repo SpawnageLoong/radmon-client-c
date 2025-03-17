@@ -284,6 +284,10 @@ int main(int argc, char *argv[])
     usleep(3000000);
     logger.log("Running test cycle.", INFO);
     fprintf(stderr, "Running test cycle.\n");
+    logger.log("Sending dump command.", INFO);
+    fprintf(stderr, "Sending dump command.\n");
+    send_full_dump_cmd(tty_fd, inject_id);
+    usleep(1000000);
     logger.log("Sending fill command.", INFO);
     fprintf(stderr, "Sending fill command.\n");
     send_fill_cmd(tty_fd, inject_id);
@@ -356,6 +360,12 @@ int main(int argc, char *argv[])
       case '8':
         logger.log("Running test cycle", INFO);
         fprintf(stderr, "Running test cycle.\n");
+        logger.log("Running test cycle.", INFO);
+        fprintf(stderr, "Running test cycle.\n");
+        logger.log("Sending dump command.", INFO);
+        fprintf(stderr, "Sending dump command.\n");
+        send_full_dump_cmd(tty_fd, inject_id);
+        usleep(1000000);
         logger.log("Sending fill command", INFO);
         fprintf(stderr, "Sending fill command.\n");
         send_fill_cmd(tty_fd, inject_id);
