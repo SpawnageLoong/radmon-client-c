@@ -719,17 +719,21 @@ static void receive_frame(int tty_fd, unsigned char (&frame_out)[32])
   unsigned char byte;
 
   int is_frame_complete = 0;
+  char temp_string[4095];
 
   frame_len = 0;
   while (!is_frame_complete) {
     result = read(tty_fd, &byte, 1);
     if (result == -1) {
       fprintf(stderr, "read() failed: %s\n", strerror(errno));
+      logger.log("read() failed!", ERROR);
       return;
       
     } else if (result > 0) {
       if (print_traffic) {
         fprintf(stderr, "%02x ", byte);
+        sprintf(temp_string, "%02x ", byte);
+        strcat(debug_output, temp_string);
       }
 
       frame[frame_len++] = byte;
@@ -743,17 +747,22 @@ static void receive_frame(int tty_fd, unsigned char (&frame_out)[32])
     }
     usleep(2);
   }
+  if (print_traffic) {
+    logger.log(debug_output, INFO);
+  }
 
   if ((frame_len == 20) && (frame[0] == 0xaa) && (frame[1] == 0x55)) {
     checksum = generate_checksum(&frame[2], 17);
     if (checksum != frame[frame_len - 1]) {
       fprintf(stderr, "receive_frame() failed: Checksum incorrect\n");
+      logger.log("receive_frame() failed: Checksum incorrect", ERROR);
       return;
     }
   }
 
   if (frame_len == -1) {
     printf("Frame recieve error!\n");
+    logger.log("Frame recieve error!", ERROR);
   } else {
     print_frame(frame);
 
@@ -904,8 +913,11 @@ static void send_part_dump_cmd(int tty_fd, string inject_id)
 
 static void send_update_rtc_cmd(int tty_fd, string inject_id)
 {
+  char temp_string[4095];
   time_t ts = time(NULL);
-  printf("current time: %ld\n", ts);
+  printf("Current time: %ld\n", ts);
+  sprintf(temp_string, "Current time: %ld", ts);
+  logger.log(temp_string, INFO);
   // separate ts into 8 bytes
   char hex_string[9];
   sprintf(hex_string, "%lx", ts);
@@ -921,18 +933,29 @@ static void print_frame(unsigned char *frame)
 {
   int i;
   int frame_len = sizeof(frame);
+  char temp_string[4095];
   if ((frame_len >= 6) && (frame[0] == 0xaa) && ((frame[1] >> 4) == 0xc)) {
     printf("Frame ID: %02x%02x, Data: ", frame[3], frame[2]);
+    sprintf(debug_output, "Frame ID: %02x%02x, Data: ", frame[3], frame[2]);
+    logger.log(debug_output, INFO);
+    sprintf(debug_output, " ");
     for (i = 4; i < 12; i++) {
       printf("%02x ", frame[i]);
+      sprintf(temp_string, "%02x ", frame[i]);
+      strcat(debug_output, temp_string);
     }
     printf("\n");
+    logger.log(debug_output, INFO);
   } else {
     printf("Unknown: ");
+    sprintf(debug_output, "Unknown: ");
     for (i = 0; i <= frame_len; i++) {
       printf("%02x ", frame[i]);
+      sprintf(temp_string, "%02x ", frame[i]);
+      strcat(debug_output, temp_string);
     }
     printf("\n");
+    logger.log(debug_output, INFO);
   }
 }
 
@@ -956,12 +979,6 @@ static void read_frames_to_file(int tty_fd, char *bin_path, string cmd, int fram
 
   ofstream dump_file(dump_path);
 
-  /*
-  for (int i = 0; i < frame_count; i++) {
-    save_frame(tty_fd, dump_file);
-  }
-  */
-
   int i = 0;
   bool is_prev_frame_unknown = false;
   while (i < frame_count) {
@@ -983,18 +1000,24 @@ static void save_frame(int tty_fd, ofstream& dump_file, int& i, bool& is_prev_fr
   unsigned char byte;
 
   int is_frame_complete = 0;
+  char temp_string[4095];
 
+  sprintf(debug_output, " ");
   frame_len = 0;
   while (!is_frame_complete) {
     result = read(tty_fd, &byte, 1);
     if (result == -1) {
       fprintf(stderr, "read() failed: %s\n", strerror(errno));
+      sprintf(debug_output, "read() failed: %s\n", strerror(errno));
+      logger.log(debug_output, ERROR);
       i++;
       return;
       
     } else if (result > 0) {
       if (print_traffic) {
         fprintf(stderr, "%02x ", byte);
+        sprintf(temp_string, "%02x ", byte);
+        strcat(debug_output, temp_string);
       }
 
       frame[frame_len++] = byte;
@@ -1014,12 +1037,14 @@ static void save_frame(int tty_fd, ofstream& dump_file, int& i, bool& is_prev_fr
     checksum = generate_checksum(&frame[2], 17);
     if (checksum != frame[frame_len - 1]) {
       fprintf(stderr, "receive_frame() failed: Checksum incorrect\n");
+      logger.log("receive_frame() failed: Checksum incorrect", ERROR);
       return;
     }
   }
 
   if (frame_len == -1) {
     printf("Frame recieve error!\n");
+    logger.log("Frame recieve error!", ERROR);
   } else {
     if ((frame_len >= 6) && (frame[0] == 0xaa) && ((frame[1] >> 4) == 0xc)) {
       printf("Frame ID: %02x%02x, Data: ", frame[3], frame[2]);
