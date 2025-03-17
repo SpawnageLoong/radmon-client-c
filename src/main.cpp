@@ -617,6 +617,7 @@ static int send_data_frame(int tty_fd, const string hex_id, const char *hex_data
   data_len = convert_from_hex(hex_data, binary_data, sizeof(binary_data));
   if (data_len == 0) {
     fprintf(stderr, "Unable to convert data from hex to binary!\n");
+    logger.log("Unable to convert data from hex to binary!", ERROR);
     return -1;
   }
 
@@ -636,6 +637,7 @@ static int send_data_frame(int tty_fd, const string hex_id, const char *hex_data
   
     default:
       fprintf(stderr, "Unable to convert ID from hex to binary!\n");
+      logger.log("Unable to convert ID from hex to binary!", ERROR);
       return -1;
   }
 
@@ -648,6 +650,7 @@ static int send_data_frame(int tty_fd, const string hex_id, const char *hex_data
   if (data_len < 0 || data_len > 8)
   {
     fprintf(stderr, "Data length code (DLC) must be between 0 and 8!\n");
+    logger.log("Data length code (DLC) must be between 0 and 8!", ERROR);
     return -1;
   }
 
@@ -679,6 +682,7 @@ static int send_data_frame(int tty_fd, const string hex_id, const char *hex_data
   if (frame_send(tty_fd, data_frame, data_frame_len) < 0)
   {
     fprintf(stderr, "Unable to send frame!\n");
+    logger.log("Unable to send frame!", ERROR);
     return -1;
   }
 
