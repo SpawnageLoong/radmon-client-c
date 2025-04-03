@@ -282,6 +282,7 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Updating RTC.\n");
     send_update_rtc_cmd(tty_fd, inject_id);
     usleep(3000000);
+    receive_frame(tty_fd, frame);
     logger.log("Running test cycle.", INFO);
     fprintf(stderr, "Running test cycle.\n");
     logger.log("Sending dump command.", INFO);
@@ -341,6 +342,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Updating RTC.\n");
         send_update_rtc_cmd(tty_fd, inject_id);
         usleep(100000);
+        receive_frame(tty_fd, frame);
         break;
 
       case '6':
