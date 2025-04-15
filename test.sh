@@ -1,2 +1,2 @@
 #!/bin/bash
-/home/pie/radmon-client-c/bin/radmon-client -d /dev/ttyUSB0 -t
+/home/richard/cde4301_ws/radmon-client-c/bin/radmon-client -d /dev/ttyUSB0 -t
